@@ -1,4 +1,4 @@
-# Dapka GeoIO
+# Dapla GeoIO
 
 [![PyPI](https://img.shields.io/pypi/v/dapla-geoio.svg)][pypi status]
 [![Status](https://img.shields.io/pypi/status/dapla-geoio.svg)][pypi status]
@@ -35,7 +35,7 @@
 
 ## Installation
 
-You can install _Dapka GeoIO_ via [pip] from [PyPI]:
+You can install _Dapla GeoIO_ via [pip] from [PyPI]:
 
 ```console
 pip install dapla-geoio
@@ -53,7 +53,7 @@ To learn more, see the [Contributor Guide].
 ## License
 
 Distributed under the terms of the [MIT license][license],
-_Dapka GeoIO_ is free and open source software.
+_Dapla GeoIO_ is free and open source software.
 
 ## Issues
 

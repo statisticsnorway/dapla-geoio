@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "dapla-geoio"
 version = "0.0.1"
-description = "Dapka GeoIO"
+description = "Dapla GeoIO"
 authors = ["Bjørn Lie Rapp <bjorn.rapp@ssb.no>"]
 license = "MIT"
 readme = "README.md"

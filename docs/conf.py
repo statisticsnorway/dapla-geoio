@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.abspath("../src"))
 
 # -- Project information -----------------------------------------------------
 
-project = "Dapka GeoIO"
+project = "Dapla GeoIO"
 copyright = "2024, Statistics Norway"
 author = "Bjørn Lie Rapp"
 
