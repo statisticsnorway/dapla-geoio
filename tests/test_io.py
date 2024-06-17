@@ -45,7 +45,7 @@ def test_read_parquet(mocker: MockerFixture) -> None:
     assert_frame_equal(punkdataframe, lestdataframe)
 
 
-def test_write_parquet(mocker: MockerFixture, parquetfile_path) -> None:
+def test_write_parquet(mocker: MockerFixture, parquetfile_path: str) -> None:
     file_client_mock = mocker.patch("dapla_geoio.io.FileClient")
     file_client_mock.get_gcs_file_system.return_value = LocalFileSystem()
 
@@ -53,7 +53,7 @@ def test_write_parquet(mocker: MockerFixture, parquetfile_path) -> None:
     assert os.path.exists(parquetfile_path)
 
 
-def test_write_shp(mocker: MockerFixture, shpfile_path) -> None:
+def test_write_shp(mocker: MockerFixture, shpfile_path: str) -> None:
     mock_google_creds = mocker.Mock(spec=Credentials)
     mock_google_creds.token = None
     auth_client_mock = mocker.patch("dapla_geoio.io.AuthClient")

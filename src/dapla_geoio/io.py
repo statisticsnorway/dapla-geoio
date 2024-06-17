@@ -1,5 +1,6 @@
 import json
 from collections.abc import Iterable
+from typing import Any
 
 import geopandas as gpd
 import numpy as np
@@ -227,7 +228,7 @@ def _arrow_til_geopandas(
     return gpd.GeoDataFrame(df, geometry=geometry_column)
 
 
-def _create_metadata(gdf: gpd.GeoDataFrame) -> None:
+def _create_metadata(gdf: gpd.GeoDataFrame) -> dict[str, Any]:
     schema_version = "1.0.0"
 
     # Construct metadata for each geometry
