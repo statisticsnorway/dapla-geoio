@@ -91,9 +91,7 @@ select = [
     "RUF",  # the ruff developer's own rules
 ]
 ignore = [
-    "ANN101", # Supress missing-type-self.
-    "ANN102", # Supress missing-type-cls.
-    "ANN202", # Don't requiere return type annotation for private functions.
+    "ANN003", # Supress Missing type annotation for `**kwargs`
     "ANN401", # Allow type annotation with type Any.
     "D100",   # Supress undocumented-public-module. Only doc of public api required.
     "E402",   # Supress module-import-not-at-top-of-file, needed in jupyter notebooks.
