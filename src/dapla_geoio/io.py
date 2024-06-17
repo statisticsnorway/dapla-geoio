@@ -118,7 +118,7 @@ def read_geodataframe(
         set_gdal_auth()
         path = _ensure_gs_vsi_prefix(gcs_path)
 
-        return pyogrio.read_dataframe(path, use_arrow=True, **kwargs)
+        return pyogrio.read_dataframe(path, columns=columns, use_arrow=True, **kwargs)
 
 
 def write_geodataframe(
