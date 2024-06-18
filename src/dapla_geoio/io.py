@@ -113,7 +113,7 @@ def read_geodataframe(
 
     else:
         if not isinstance(gcs_path, str):
-            ValueError("Multiple paths are only supported for parquet format")
+            raise ValueError("Multiple paths are only supported for parquet format")
 
         set_gdal_auth()
         path = _ensure_gs_vsi_prefix(gcs_path)
