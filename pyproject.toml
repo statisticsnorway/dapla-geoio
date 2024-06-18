@@ -16,6 +16,7 @@ Changelog = "https://github.com/statisticsnorway/dapla-geoio/releases"
 [tool.poetry.dependencies]
 python = "^3.10"
 geopandas = "^0.14.4"
+numpy = ">=1.26,<2.0"
 pyogrio = "^0.8.0"
 dapla-toolbelt = "^2.0.13"
 
