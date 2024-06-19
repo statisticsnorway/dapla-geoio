@@ -1,5 +1,6 @@
 """Nox sessions."""
 
+from collections.abc import Iterable
 import os
 import shlex
 import shutil
@@ -35,7 +36,7 @@ nox.options.sessions = (
 )
 
 
-def install_dependency_groups(session: Session, groups: list[str]):
+def install_dependency_groups(session: Session, groups: Iterable[str]) -> None:
     """Manually parse the pyproject file to find group(s) of dependencies, then install."""
     pyproject_path = Path("pyproject.toml")
     data = nox.project.load_toml(pyproject_path)
@@ -172,7 +173,7 @@ def tests(session: Session) -> None:
     """Run the test suite."""
     session.poetry.installroot()
     session.install("coverage[toml]", "pygments")
-    install_dependency_groups(session, ("test"))
+    install_dependency_groups(session, ("test",))
     try:
         session.run(
             "coverage",
