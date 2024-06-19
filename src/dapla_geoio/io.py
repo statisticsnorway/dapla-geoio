@@ -1,13 +1,14 @@
 import json
+import sys
 from collections.abc import Iterable
 from typing import Any
 from typing import Literal
 
-try:
-    from typing import NotRequired
+if sys.version_info >= (3, 11):
+    from typing import Required
     from typing import TypedDict
-except ImportError:
-    from typing_extensions import NotRequired
+else:
+    from typing_extensions import Required
     from typing_extensions import TypedDict
 
 import geopandas as gpd
@@ -33,15 +34,15 @@ _geometry_type_names = [
 _geometry_type_names.extend([geom_type + " Z" for geom_type in _geometry_type_names])
 
 
-class _GeoParquetColumnMetadata(TypedDict):
-    encoding: str
-    geometry_types: list[str]
-    crs: NotRequired[str | dict[str, Any]]
-    orientation: NotRequired[Literal["counterclockwise"]]
-    edges: NotRequired[Literal["planar", "spherical"]]
-    bbox: NotRequired[list[float]]
-    epoch: NotRequired[float]
-    covering: NotRequired[dict[str, Any]]
+class _GeoParquetColumnMetadata(TypedDict, total=False):
+    encoding: Required[str]
+    geometry_types: Required[list[str]]
+    crs: str | dict[str, Any] | None
+    orientation: Literal["counterclockwise"]
+    edges: Literal["planar", "spherical"]
+    bbox: list[float]
+    epoch: float
+    covering: dict[str, Any]
 
 
 class _GeoParquetMetadata(TypedDict):
