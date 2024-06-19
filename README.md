@@ -25,20 +25,20 @@
 [black]: https://github.com/psf/black
 [poetry]: https://python-poetry.org/
 
-## Features
+## Funksjonalitet
 
-- TODO
+_Dapla geoio_ leser og skriver filer med geometri til og fra en `geopandas.geodataframe` på SSBs dataplatform Dapla.
+Pakka kan lese og skrive geoparquetfiler med WKB kodet geometri. Den kan også lese partisjonerte parquet-filer. Støtte for [Geoarrow] kodet geometri er planlagt.
+_Dapla geoio_ bruker [Pyogrio] til å lese og skrive til andre filformater, og kan derfor også lese og skrive til de formatene som Pyogrio kan. Testet med Geopackage og Shape-filer.
 
-## Requirements
+Hvis du kun behøver lese og skrive funksjonalitet er _Dapla geoio_ et lettere alternativ til [ssb-sgis]
 
-- TODO
+## Installasjon
 
-## Installation
-
-You can install _Dapla GeoIO_ via [pip] from [PyPI]:
+Du kan installere _Dapla GeoIO_ via [pip] fra [PyPI]:
 
 ```console
-pip install dapla-geoio
+pip install ssb-dapla-geoio
 ```
 
 ## Usage
@@ -69,6 +69,9 @@ This project was generated from [Statistics Norway]'s [SSB PyPI Template].
 [ssb pypi template]: https://github.com/statisticsnorway/ssb-pypitemplate
 [file an issue]: https://github.com/statisticsnorway/dapla-geoio/issues
 [pip]: https://pip.pypa.io/
+[pyogrio]: https://pypi.org/project/pyogrio/
+[ssb-sgis]: https://pypi.org/project/ssb-sgis/
+[geoarrow]: https://geoarrow.org
 
 <!-- github-only -->
 
