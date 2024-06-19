@@ -2,8 +2,13 @@ import json
 from collections.abc import Iterable
 from typing import Any
 from typing import Literal
-from typing import NotRequired
-from typing import TypedDict
+
+try:
+    from typing import NotRequired
+    from typing import TypedDict
+except ImportError:
+    from typing_extensions import NotRequired
+    from typing_extensions import TypedDict
 
 import geopandas as gpd
 import numpy as np
