@@ -1,6 +1,15 @@
 import json
+import sys
 from collections.abc import Iterable
 from typing import Any
+from typing import Literal
+
+if sys.version_info >= (3, 11):
+    from typing import Required
+    from typing import TypedDict
+else:
+    from typing_extensions import Required
+    from typing_extensions import TypedDict
 
 import geopandas as gpd
 import numpy as np
@@ -23,6 +32,23 @@ _geometry_type_names = [
     "GeometryCollection",
 ]
 _geometry_type_names.extend([geom_type + " Z" for geom_type in _geometry_type_names])
+
+
+class _GeoParquetColumnMetadata(TypedDict, total=False):
+    encoding: Required[str]
+    geometry_types: Required[list[str]]
+    crs: str | dict[str, Any] | None
+    orientation: Literal["counterclockwise"]
+    edges: Literal["planar", "spherical"]
+    bbox: list[float]
+    epoch: float
+    covering: dict[str, Any]
+
+
+class _GeoParquetMetadata(TypedDict):
+    version: str
+    primary_column: str
+    columns: dict[str, _GeoParquetColumnMetadata]
 
 
 def set_gdal_auth() -> None:
@@ -80,10 +106,10 @@ def _get_geometry_types(series: gpd.GeoSeries) -> list[str]:
 def read_geodataframe(
     gcs_path: str | Iterable[str],
     file_format: str | None = None,
-    columns: Iterable[str] | None = None,
+    columns: list[str] | None = None,
     # filters: list[tuple | list[tuple]] | pyarrow.compute.Expression | None = None,
     geometry_column: str | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> gpd.GeoDataFrame:
     """Leser inn en fil som innholder geometri til en Geopandas geodataframe.
 
@@ -104,7 +130,7 @@ def read_geodataframe(
         if isinstance(gcs_path, str):
             gcs_path = _remove_prefix(gcs_path)
         else:
-            gcs_path = (_remove_prefix(file) for file in gcs_path)
+            gcs_path = [_remove_prefix(file) for file in gcs_path]
 
         arrow_table = parquet.ParquetDataset(gcs_path, filesystem=filesystem).read(
             columns=columns, use_pandas_metadata=True
@@ -113,7 +139,7 @@ def read_geodataframe(
 
     else:
         if not isinstance(gcs_path, str):
-            ValueError("Multiple paths are only supported for parquet format")
+            raise ValueError("Multiple paths are only supported for parquet format")
 
         set_gdal_auth()
         path = _ensure_gs_vsi_prefix(gcs_path)
@@ -125,7 +151,7 @@ def write_geodataframe(
     gdf: gpd.GeoDataFrame,
     gcs_path: str,
     file_format: str | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> None:
     """Skriver en Geopandas geodataframe til ei fil.
 
@@ -176,10 +202,10 @@ def _geopandas_to_arrow(gdf: gpd.GeoDataFrame) -> pyarrow.Table:
 
     # Store geopandas specific file-level metadata
     # This must be done AFTER creating the table or it is not persisted
-    metadata = table.schema.metadata
+    metadata = table.schema.metadata if table.schema.metadata else {}
     metadata.update({b"geo": json.dumps(geo_metadata).encode("utf-8")})
 
-    return table.replace_schema_metadata(metadata)
+    return table.replace_schema_metadata(metadata)  # type: ignore[arg-type]
 
 
 def _arrow_til_geopandas(
@@ -188,9 +214,11 @@ def _arrow_til_geopandas(
     """Kopiert og tilpasset privat funksjon fra https://github.com/geopandas/geopandas/blob/9ad28395c0b094dbddd282a5bdf44900fe6650a1/geopandas/io/arrow.py."""
     df = arrow_table.to_pandas()
 
-    geometry_metadata = json.loads(arrow_table.schema.metadata[b"geo"].decode("utf-8"))
+    geometry_metadata = _get_geometry_metadata(arrow_table.schema)
 
-    geometry_columns = df.columns.intersection(geometry_metadata["columns"])
+    geometry_columns = df.columns.intersection(
+        list(geometry_metadata["columns"].keys())
+    )
 
     if not len(geometry_columns):
         raise ValueError(
@@ -228,31 +256,44 @@ def _arrow_til_geopandas(
     return gpd.GeoDataFrame(df, geometry=geometry_column)
 
 
-def _create_metadata(gdf: gpd.GeoDataFrame) -> dict[str, Any]:
+def _get_geometry_metadata(schema: pyarrow.Schema) -> _GeoParquetMetadata:
+    metadata = schema.metadata if schema.metadata else {}
+    try:
+        geo_metadata_bytes = metadata[b"geo"]
+
+    except KeyError:
+        raise ValueError(
+            """No geometry metadata is present.
+            To read a table without geometry, use dapla.read_pandas() instead"""
+        ) from None
+
+    return json.loads(geo_metadata_bytes.decode("utf-8"))  # type: ignore[no-any-return]
+
+
+def _create_metadata(gdf: gpd.GeoDataFrame) -> _GeoParquetMetadata:
     schema_version = "1.0.0"
 
     # Construct metadata for each geometry
-    column_metadata = {}
+    columns_metadata: dict[str, _GeoParquetColumnMetadata] = {}
     for col in gdf.columns[gdf.dtypes == "geometry"]:
         series = gdf[col]
 
         geometry_types = _get_geometry_types(series)
-        geometry_types_name = "geometry_types"
 
         crs = series.crs.to_json_dict() if series.crs else None
 
-        column_metadata[col] = {
+        column_metadata: _GeoParquetColumnMetadata = {
             "encoding": "WKB",
             "crs": crs,
-            geometry_types_name: geometry_types,
+            "geometry_types": geometry_types,
         }
 
         bbox = series.total_bounds.tolist()
         if np.isfinite(bbox).all():
             # don't add bbox with NaNs for empty / all-NA geometry column
-            column_metadata[col]["bbox"] = bbox
+            column_metadata["bbox"] = bbox
 
-        column_metadata[col]["covering"] = {
+        column_metadata["covering"] = {
             "bbox": {
                 "xmin": ["bbox", "xmin"],
                 "ymin": ["bbox", "ymin"],
@@ -261,9 +302,10 @@ def _create_metadata(gdf: gpd.GeoDataFrame) -> dict[str, Any]:
             },
         }
 
+        columns_metadata[col] = column_metadata
+
     return {
         "primary_column": gdf.geometry.name,
-        "columns": column_metadata,
+        "columns": columns_metadata,
         "version": schema_version,
-        "creator": {"library": "geopandas", "version": gpd.__version__},
     }

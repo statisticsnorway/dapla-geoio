@@ -1,5 +1,6 @@
 import os
 import pathlib
+from collections.abc import Iterator
 
 import geopandas as gpd
 import pytest
@@ -18,21 +19,19 @@ testdata_folder = pathlib.Path("tests", "data")
 
 
 @pytest.fixture
-def parquetfile_path():
+def parquetfile_path() -> Iterator[str]:
     path = str(testdata_folder / "pointsw.parquet")
     yield path
     os.remove(path)
 
 
 @pytest.fixture
-def shpfile_path():
+def shpfile_path() -> Iterator[str]:
     path = str(testdata_folder / "pointsw.shp")
     yield path
     os.remove(path)
-    [
+    for sidecar in ("pointsw.cpg", "pointsw.dbf", "pointsw.shx"):
         os.remove(testdata_folder / sidecar)
-        for sidecar in ("pointsw.cpg", "pointsw.dbf", "pointsw.shx")
-    ]
 
 
 def test_read_parquet(mocker: MockerFixture) -> None:
