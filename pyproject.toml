@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "dapla-geoio"
+name = "ssb-dapla-geoio"
 version = "0.0.1"
 description = "Dapla GeoIO"
 authors = ["Bjørn Lie Rapp <bjorn.rapp@ssb.no>"]
