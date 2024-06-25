@@ -123,15 +123,15 @@ It is recommended to open an issue before starting work on anything.
 This will allow a chance to talk it over with the owners and validate your approach.
 
 [mit license]: https://opensource.org/licenses/MIT
-[source code]: https://github.com/statisticsnorway/dapla-geoio
-[documentation]: https://statisticsnorway.github.io/dapla-geoio
-[issue tracker]: https://github.com/statisticsnorway/dapla-geoio/issues
+[source code]: https://github.com/Bjoern-Rapp/ssb-dapla-geoio
+[documentation]: https://Bjoern-Rapp.github.io/ssb-dapla-geoio
+[issue tracker]: https://github.com/Bjoern-Rapp/ssb-dapla-geoio/issues
 [pipx]: https://pipx.pypa.io/
 [poetry]: https://python-poetry.org/
 [nox]: https://nox.thea.codes/
 [nox-poetry]: https://nox-poetry.readthedocs.io/
 [pytest]: https://pytest.readthedocs.io/
-[pull request]: https://github.com/statisticsnorway/dapla-geoio/pulls
+[pull request]: https://github.com/Bjoern-Rapp/ssb-dapla-geoio/pulls
 
 <!-- github-only -->
 

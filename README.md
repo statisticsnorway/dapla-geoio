@@ -5,22 +5,20 @@
 [![Python Version](https://img.shields.io/pypi/pyversions/dapla-geoio)][pypi status]
 [![License](https://img.shields.io/pypi/l/dapla-geoio)][license]
 
-[![Documentation](https://github.com/statisticsnorway/dapla-geoio/actions/workflows/docs.yml/badge.svg)][documentation]
-[![Tests](https://github.com/statisticsnorway/dapla-geoio/actions/workflows/tests.yml/badge.svg)][tests]
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=statisticsnorway_dapla-geoio&metric=coverage)][sonarcov]
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=statisticsnorway_dapla-geoio&metric=alert_status)][sonarquality]
+[![Documentation](https://github.com/Bjoern-rapp/ssb-dapla-geoio/actions/workflows/docs.yml/badge.svg)][documentation]
+[![Tests](https://github.com/Bjoern-rapp/ssb-dapla-geoio/actions/workflows/tests.yml/badge.svg)][tests]
+[![Documentation](https://github.com/Bjoern-Rapp/ssb-dapla-geoio/actions/workflows/docs.yml/badge.svg)][documentation]
+[![Tests](https://github.com/Bjoern-Rapp/ssb-dapla-geoio/actions/workflows/tests.yml/badge.svg)][tests]
 
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)][pre-commit]
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)][black]
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)][poetry]
 
-[pypi status]: https://pypi.org/project/dapla-geoio/
-[documentation]: https://statisticsnorway.github.io/dapla-geoio
-[tests]: https://github.com/statisticsnorway/dapla-geoio/actions?workflow=Tests
+[pypi status]: https://pypi.org/project/ssb-dapla-geoio/
+[documentation]: https://bjoern-rapp.github.io/ssb-dapla-geoio
+[tests]: https://github.com/Bjoern-rapp/ssb-dapla-geoio/actions?workflow=Tests
 
-[sonarcov]: https://sonarcloud.io/summary/overall?id=statisticsnorway_dapla-geoio
-[sonarquality]: https://sonarcloud.io/summary/overall?id=statisticsnorway_dapla-geoio
 [pre-commit]: https://github.com/pre-commit/pre-commit
 [black]: https://github.com/psf/black
 [poetry]: https://python-poetry.org/
@@ -67,7 +65,7 @@ This project was generated from [Statistics Norway]'s [SSB PyPI Template].
 [statistics norway]: https://www.ssb.no/en
 [pypi]: https://pypi.org/
 [ssb pypi template]: https://github.com/statisticsnorway/ssb-pypitemplate
-[file an issue]: https://github.com/statisticsnorway/dapla-geoio/issues
+[file an issue]: https://github.com/Bjoern-Rapp/ssb-dapla-geoio/issues
 [pip]: https://pip.pypa.io/
 [pyogrio]: https://pypi.org/project/pyogrio/
 [ssb-sgis]: https://pypi.org/project/ssb-sgis/
@@ -75,6 +73,6 @@ This project was generated from [Statistics Norway]'s [SSB PyPI Template].
 
 <!-- github-only -->
 
-[license]: https://github.com/statisticsnorway/dapla-geoio/blob/main/LICENSE
-[contributor guide]: https://github.com/statisticsnorway/dapla-geoio/blob/main/CONTRIBUTING.md
-[reference guide]: https://statisticsnorway.github.io/dapla-geoio/reference.html
+[license]: https://github.com/Bjoern-Rapp/ssb-dapla-geoio/blob/main/LICENSE
+[contributor guide]: https://github.com/Bjoern-Rapp/ssb-dapla-geoio/blob/main/CONTRIBUTING.md
+[reference guide]: https://bjoern-rapp.github.io/ssb-dapla-geoio/reference.html
