@@ -1,6 +1,9 @@
+import io
 import json
+import shutil
 import sys
 from collections.abc import Iterable
+from enum import StrEnum
 from typing import Any
 from typing import Literal
 
@@ -32,6 +35,28 @@ _geometry_type_names = [
     "GeometryCollection",
 ]
 _geometry_type_names.extend([geom_type + " Z" for geom_type in _geometry_type_names])
+
+
+class FileFormat(StrEnum):
+    """En samling filformater som er garantert støttet."""
+
+    PARQUET = "parquet"
+    GEOPACKAGE = "GPKG"
+    GEOJSON = "GeoJSON"
+    FILEGDB = "OpenFileGDB"
+    FLATGEOBUFFER = "FlatGeobuf"
+    SHAPEFILE = "ESRI Shapefile"
+
+
+filextension2format = {
+    "parquet": FileFormat.PARQUET,
+    "gpkg": FileFormat.GEOPACKAGE,
+    "fgb": FileFormat.FLATGEOBUFFER,
+    "json": FileFormat.GEOJSON,
+    "geojson": FileFormat.GEOJSON,
+    "shp": FileFormat.SHAPEFILE,
+    "gdb": FileFormat.FILEGDB,
+}
 
 
 class _GeoParquetColumnMetadata(TypedDict, total=False):
@@ -67,21 +92,21 @@ def _ensure_gs_vsi_prefix(gcs_path: str) -> str:
     """Legger til prefixet "/vsigs/" til filbanen.
 
     GDAL har sitt eget virtuelle filsystem abstraksjons-skjema ulikt fsspec,
-    som bruker prefixet /vsigs/ istedenfor gs:/.
+    som bruker prefixet /vsigs/ istedenfor gs://.
     https://gdal.org/user/virtual_file_systems.html
     """
     if "/vsigs/" in gcs_path:
         return gcs_path
 
-    if gcs_path.startswith(prefix := "gs:/"):
+    if gcs_path.startswith(prefix := "gs://"):
         return f"/vsigs/{gcs_path[len(prefix):]}"
 
     return f"/vsigs/{gcs_path}"
 
 
 def _remove_prefix(gcs_path: str) -> str:
-    """Fjerner både prefikset /vsigs/ og gs:/ fra filsti."""
-    for prefix in ["gs:/", "/vsigs/"]:
+    """Fjerner både prefikset /vsigs/ og gs:// fra filsti."""
+    for prefix in ["gs://", "/vsigs/"]:
         if gcs_path.startswith(prefix):
             return gcs_path[len(prefix) :]
 
@@ -105,7 +130,7 @@ def _get_geometry_types(series: gpd.GeoSeries) -> list[str]:
 
 def read_geodataframe(
     gcs_path: str | Iterable[str],
-    file_format: str | None = None,
+    file_format: FileFormat | None = None,
     columns: list[str] | None = None,
     # filters: list[tuple | list[tuple]] | pyarrow.compute.Expression | None = None,
     geometry_column: str | None = None,
@@ -119,12 +144,12 @@ def read_geodataframe(
     if file_format is None:
         if isinstance(gcs_path, str):
             if gcs_path.endswith(".parquet"):
-                file_format = "parquet"
+                file_format = FileFormat.PARQUET
         else:
             if all(path.endswith(".parquet") for path in gcs_path):
-                file_format = "parquet"
+                file_format = FileFormat.PARQUET
 
-    if file_format == "parquet":
+    if file_format == FileFormat.PARQUET:
         filesystem = FileClient.get_gcs_file_system()
 
         if isinstance(gcs_path, str):
@@ -144,13 +169,15 @@ def read_geodataframe(
         set_gdal_auth()
         path = _ensure_gs_vsi_prefix(gcs_path)
 
-        return pyogrio.read_dataframe(path, columns=columns, use_arrow=True, **kwargs)
+        return pyogrio.read_dataframe(
+            path, columns=columns, driver=file_format, use_arrow=True, **kwargs
+        )
 
 
 def write_geodataframe(
     gdf: gpd.GeoDataFrame,
     gcs_path: str,
-    file_format: str | None = None,
+    file_format: FileFormat | None = None,
     **kwargs: Any,
 ) -> None:
     """Skriver en Geopandas geodataframe til ei fil.
@@ -158,10 +185,11 @@ def write_geodataframe(
     Støtter  å skrive til geoparquetfiler med WKB kodet geometri, og
     bruker pyogrio til å lese andre filformater.
     """
-    if file_format is None and gcs_path.endswith(".parquet"):
-        file_format = "parquet"
+    if file_format is None:
+        extension = gcs_path.rpartition(".")[-1]
+        file_format = filextension2format.get(extension)
 
-    if file_format == "parquet":
+    if file_format == FileFormat.PARQUET:
         filesystem = FileClient.get_gcs_file_system()
         gcs_path = _remove_prefix(gcs_path)
         table = _geopandas_to_arrow(gdf)
@@ -174,12 +202,35 @@ def write_geodataframe(
             **kwargs,
         )
 
-    else:
+    elif file_format == FileFormat.GEOJSON:
+        if (gdf.dtypes == "geometry").sum() != 1:
+            raise ValueError("Geojson-formatet støtter kun en geometri kolonne")
 
+        gcs_path = _remove_prefix(gcs_path)
+
+        feature_collection = gdf.to_json(ensure_ascii=False)
+
+        filesystem = FileClient.get_gcs_file_system()
+        with filesystem.open(gcs_path, "w", encoding="utf-8") as file:
+            file.write(feature_collection)
+
+    elif file_format in {FileFormat.GEOPACKAGE, FileFormat.FLATGEOBUFFER}:
+        gcs_path = _remove_prefix(gcs_path)
+
+        buffer = io.BytesIO()
+        pyogrio.write_dataframe(
+            gdf, buffer, driver=file_format, use_arrow=True, **kwargs
+        )
+
+        filesystem = FileClient.get_gcs_file_system()
+        with filesystem.open(gcs_path, "wb") as file:
+            shutil.copyfileobj(buffer, file)
+
+    else:
         set_gdal_auth()
         path = _ensure_gs_vsi_prefix(gcs_path)
 
-        pyogrio.write_dataframe(gdf, path, use_arrow=True, **kwargs)
+        pyogrio.write_dataframe(gdf, path, driver=file_format, use_arrow=True, **kwargs)
 
 
 def get_parquet_files_in_folder(folder: str) -> list[str]:

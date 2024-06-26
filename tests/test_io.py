@@ -26,6 +26,20 @@ def parquetfile_path() -> Iterator[str]:
 
 
 @pytest.fixture
+def jsonfile_path() -> Iterator[str]:
+    path = str(testdata_folder / "pointsw.json")
+    yield path
+    os.remove(path)
+
+
+@pytest.fixture
+def gpkgfile_path() -> Iterator[str]:
+    path = str(testdata_folder / "pointsw.gpkg")
+    yield path
+    os.remove(path)
+
+
+@pytest.fixture
 def shpfile_path() -> Iterator[str]:
     path = str(testdata_folder / "pointsw.shp")
     yield path
@@ -62,3 +76,19 @@ def test_write_shp(mocker: MockerFixture, shpfile_path: str) -> None:
 
     write_geodataframe(punkdataframe, shpfile_path)
     assert os.path.exists(shpfile_path)
+
+
+def test_write_geojson(mocker: MockerFixture, jsonfile_path: str) -> None:
+    file_client_mock = mocker.patch("dapla_geoio.io.FileClient")
+    file_client_mock.get_gcs_file_system.return_value = LocalFileSystem()
+
+    write_geodataframe(punkdataframe, jsonfile_path)
+    assert os.path.exists(jsonfile_path)
+
+
+def test_write_gpkg(mocker: MockerFixture, gpkgfile_path: str) -> None:
+    file_client_mock = mocker.patch("dapla_geoio.io.FileClient")
+    file_client_mock.get_gcs_file_system.return_value = LocalFileSystem()
+
+    write_geodataframe(punkdataframe, gpkgfile_path)
+    assert os.path.exists(gpkgfile_path)
