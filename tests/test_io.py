@@ -66,6 +66,15 @@ def test_write_parquet(mocker: MockerFixture, parquetfile_path: str) -> None:
     assert os.path.exists(parquetfile_path)
 
 
+def test_roundtrip_parquet(mocker: MockerFixture, parquetfile_path: str) -> None:
+    file_client_mock = mocker.patch("dapla_geoio.io.FileClient")
+    file_client_mock.get_gcs_file_system.return_value = LocalFileSystem()
+
+    write_geodataframe(punkdataframe, parquetfile_path)
+    roundtrip = read_geodataframe(parquetfile_path)
+    assert_frame_equal(punkdataframe, roundtrip)
+
+
 def test_write_shp(mocker: MockerFixture, shpfile_path: str) -> None:
     mock_google_creds = mocker.Mock(spec=Credentials)
     mock_google_creds.token = None

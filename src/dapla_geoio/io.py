@@ -16,12 +16,15 @@ else:
 
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 import pyarrow
 import pyogrio
 import shapely
 from dapla import AuthClient
 from dapla import FileClient
 from geopandas.array import from_wkb
+from geopandas.io._geoarrow import construct_geometry_array
+from geopandas.io._geoarrow import construct_wkb_array
 from pyarrow import parquet
 
 _geometry_type_names = [
@@ -35,6 +38,22 @@ _geometry_type_names = [
     "GeometryCollection",
 ]
 _geometry_type_names.extend([geom_type + " Z" for geom_type in _geometry_type_names])
+
+
+def homogen_geometri(geoserie: gpd.GeoSeries) -> bool:
+    """Sjekker at alle elementer i serien har lik geometritype og ikke er av typen GeometryCollection."""
+    notnamaske = geoserie.notna()
+    if not notnamaske.any():
+        raise RuntimeError(
+            f"Geometrikolonnen {geoserie.name} innholder kun tomme rader"
+        )
+
+    notna = geoserie[notnamaske]
+    første = notna.iat[0]
+    return (
+        første.geom_type != "GeometryCollection"
+        and (notna.geom_type == første.geom_type).all()
+    )
 
 
 class FileFormat(StrEnum):
@@ -258,15 +277,46 @@ def get_parquet_files_in_folder(folder: str) -> list[str]:
 
 def _geopandas_to_arrow(gdf: gpd.GeoDataFrame) -> pyarrow.Table:
     """Kopiert og tilpasset privat funksjon fra https://github.com/geopandas/geopandas/blob/9ad28395c0b094dbddd282a5bdf44900fe6650a1/geopandas/io/arrow.py."""
-    # create geo metadata before altering incoming data frame
-    geo_metadata = _create_metadata(gdf)
+    mask = gdf.dtypes == "geometry"
+    geometry_columns = gdf.columns[mask]
+    geometry_indices = np.asarray(mask).nonzero()[0]
 
-    df = gdf.to_wkb()
+    df_attr = pd.DataFrame(gdf.copy(deep=False))
+    for geo_column in geometry_columns:
+        df_attr[geo_column] = None
 
-    table = pyarrow.Table.from_pandas(df)
+    table = pyarrow.Table.from_pandas(df_attr)
+
+    geometry_encoding_dict = {}
+
+    for i, geo_column in zip(geometry_indices, geometry_columns, strict=False):
+        geo_series = gdf[geo_column]
+        encoding = "geoarrow" if homogen_geometri(geo_series) else "WKB"
+
+        if encoding == "geoarrow":
+            field, geom_arr = construct_geometry_array(
+                np.array(geo_series.array),
+                field_name=geo_column,
+                crs=gdf.crs,
+            )
+
+            geometry_encoding_dict[geo_column] = (
+                field.metadata[b"ARROW:extension:name"]
+                .decode()
+                .removeprefix("geoarrow.")
+            )
+
+        elif encoding == "WKB":
+            construct_wkb_array(
+                np.asarray(geo_series.array), field_name=geo_column, crs=gdf.crs
+            )
+            geometry_encoding_dict[geo_column] = encoding
+
+        table = table.set_column(i, field, geom_arr)
 
     # Store geopandas specific file-level metadata
     # This must be done AFTER creating the table or it is not persisted
+    geo_metadata = _create_metadata(gdf, geometry_encoding_dict)
     metadata = table.schema.metadata if table.schema.metadata else {}
     metadata.update({b"geo": json.dumps(geo_metadata).encode("utf-8")})
 
@@ -277,13 +327,13 @@ def _arrow_til_geopandas(
     arrow_table: pyarrow.Table, geometry_column: str | None = None
 ) -> gpd.GeoDataFrame:
     """Kopiert og tilpasset privat funksjon fra https://github.com/geopandas/geopandas/blob/9ad28395c0b094dbddd282a5bdf44900fe6650a1/geopandas/io/arrow.py."""
-    df = arrow_table.to_pandas()
-
     geometry_metadata = _get_geometry_metadata(arrow_table.schema)
 
-    geometry_columns = df.columns.intersection(
-        list(geometry_metadata["columns"].keys())
-    )
+    geometry_columns = [
+        col for col in geometry_metadata["columns"] if col in arrow_table.column_names
+    ]
+    result_column_names = list(arrow_table.slice(0, 0).to_pandas().columns)
+    geometry_columns.sort(key=result_column_names.index)
 
     if not len(geometry_columns):
         raise ValueError(
@@ -291,6 +341,9 @@ def _arrow_til_geopandas(
             the Parquet/Feather file.  To read this file without geometry columns,
             use dapla.read_pandas() instead."""
         )
+
+    table_attr = arrow_table.drop(geometry_columns)
+    df = table_attr.to_pandas()
 
     geometry_column = (
         geometry_metadata["primary_column"] if not geometry_column else geometry_column
@@ -303,6 +356,9 @@ def _arrow_til_geopandas(
             "Geometry column not in columns read from the Parquet/Feather file."
         )
 
+    table_attr = arrow_table.drop(geometry_columns)
+    df = table_attr.to_pandas()
+
     # Convert the WKB columns that are present back to geometry.
     for column in geometry_columns:
         column_metadata = geometry_metadata["columns"][column]
@@ -314,9 +370,11 @@ def _arrow_til_geopandas(
             crs = "OGC:CRS84"
 
         if column_metadata["encoding"] == "WKB":
-            df[column] = from_wkb(df[column].values, crs=crs)
+            geom_arr = from_wkb(np.array(arrow_table[column]), crs=crs)
         else:
             raise ValueError("Only WKB encoding of geometry is supported.")
+
+        df.insert(result_column_names.index(column), column, geom_arr)
 
     return gpd.GeoDataFrame(df, geometry=geometry_column)
 
@@ -335,7 +393,9 @@ def _get_geometry_metadata(schema: pyarrow.Schema) -> _GeoParquetMetadata:
     return json.loads(geo_metadata_bytes.decode("utf-8"))  # type: ignore[no-any-return]
 
 
-def _create_metadata(gdf: gpd.GeoDataFrame) -> _GeoParquetMetadata:
+def _create_metadata(
+    gdf: gpd.GeoDataFrame, geometry_encoding: dict[str, str]
+) -> _GeoParquetMetadata:
     schema_version = "1.0.0"
 
     # Construct metadata for each geometry
@@ -348,7 +408,7 @@ def _create_metadata(gdf: gpd.GeoDataFrame) -> _GeoParquetMetadata:
         crs = series.crs.to_json_dict() if series.crs else None
 
         column_metadata: _GeoParquetColumnMetadata = {
-            "encoding": "WKB",
+            "encoding": geometry_encoding[col],
             "crs": crs,
             "geometry_types": geometry_types,
         }
