@@ -170,7 +170,11 @@ def read_geodataframe(
         path = _ensure_gs_vsi_prefix(gcs_path)
 
         return pyogrio.read_dataframe(
-            path, columns=columns, driver=file_format, use_arrow=True, **kwargs
+            path,
+            columns=columns,
+            driver=(str(file_format) if file_format else None),
+            use_arrow=True,
+            **kwargs,
         )
 
 
@@ -217,20 +221,30 @@ def write_geodataframe(
     elif file_format in {FileFormat.GEOPACKAGE, FileFormat.FLATGEOBUFFER}:
         gcs_path = _remove_prefix(gcs_path)
 
-        buffer = io.BytesIO()
-        pyogrio.write_dataframe(
-            gdf, buffer, driver=file_format, use_arrow=True, **kwargs
-        )
+        with io.BytesIO() as buffer:
+            pyogrio.write_dataframe(
+                gdf,
+                buffer,
+                driver=(str(file_format) if file_format else None),
+                use_arrow=True,
+                **kwargs,
+            )
 
-        filesystem = FileClient.get_gcs_file_system()
-        with filesystem.open(gcs_path, "wb") as file:
-            shutil.copyfileobj(buffer, file)
+            filesystem = FileClient.get_gcs_file_system()
+            with filesystem.open(gcs_path, "wb") as file:
+                shutil.copyfileobj(buffer, file)
 
     else:
         set_gdal_auth()
         path = _ensure_gs_vsi_prefix(gcs_path)
 
-        pyogrio.write_dataframe(gdf, path, driver=file_format, use_arrow=True, **kwargs)
+        pyogrio.write_dataframe(
+            gdf,
+            path,
+            driver=(str(file_format) if file_format else None),
+            use_arrow=True,
+            **kwargs,
+        )
 
 
 def get_parquet_files_in_folder(folder: str) -> list[str]:
