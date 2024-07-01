@@ -22,8 +22,10 @@ import pyogrio
 import shapely
 from dapla import AuthClient
 from dapla import FileClient
+from geopandas.array import from_shapely
 from geopandas.array import from_wkb
 from geopandas.io._geoarrow import construct_geometry_array
+from geopandas.io._geoarrow import construct_shapely_array
 from geopandas.io._geoarrow import construct_wkb_array
 from pyarrow import parquet
 
@@ -372,7 +374,13 @@ def _arrow_til_geopandas(
         if column_metadata["encoding"] == "WKB":
             geom_arr = from_wkb(np.array(arrow_table[column]), crs=crs)
         else:
-            raise ValueError("Only WKB encoding of geometry is supported.")
+            geom_arr = from_shapely(
+                construct_shapely_array(
+                    arrow_table[column].combine_chunks(),
+                    "geoarrow." + column_metadata["encoding"],
+                ),
+                crs=crs,
+            )
 
         df.insert(result_column_names.index(column), column, geom_arr)
 
