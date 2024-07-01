@@ -10,4 +10,4 @@ the security and privacy of all our users.
 
 If you believe you have found a security vulnerability in any of SSB's GitHub
 repositories, please report it to us using the
-[Github Private vulnerability reporting tool](https://github.com/Bjoern-Rapp/ssb-dapla-geoio/security/advisories).
+[Github Private vulnerability reporting tool](https://github.com/statisticsnorway/dapla-geoio/security/advisories).

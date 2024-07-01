@@ -6,13 +6,13 @@ description = "Dapla GeoIO"
 authors = ["Bjørn Lie Rapp <bjorn.rapp@ssb.no>"]
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/Bjoern-Rapp/ssb-dapla-geoio"
-repository = "https://github.com/Bjoern-Rapp/ssb-dapla-geoio"
-documentation = "https://bjoern-rapp.github.io/ssb-dapla-geoio"
+homepage = "https://github.com/statisticsnorway/dapla-geoio"
+repository = "https://github.com/statisticsnorway/dapla-geoio"
+documentation = "https://statisticsnorway.github.io/dapla-geoio"
 classifiers = ["Development Status :: 2 - Pre-Alpha"]
 
 [tool.poetry.urls]
-Changelog = "https://github.com/Bjoern-Rapp/ssb-dapla-geoio/releases"
+Changelog = "https://github.com/statisticsnorway/dapla-geoio/releases"
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -54,7 +54,7 @@ myst-parser = { version = ">=0.16.1" }
 pythonpath = ["src"]
 
 [tool.poetry.scripts]
-dapla-geoio = "dapla_geoio.__main__:main"
+ssb-dapla-geoio = "dapla_geoio.__main__:main"
 
 [tool.coverage.paths]
 source = ["src", "*/site-packages"]

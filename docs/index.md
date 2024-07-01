@@ -18,5 +18,5 @@ reference
 contributing
 Code of Conduct <codeofconduct>
 License <license>
-Changelog <https://github.com/Bjoern-Rapp/ssb-dapla-geoio/releases>
+Changelog <https://github.com/statisticsnorway/dapla-geoio/releases>
 ```
