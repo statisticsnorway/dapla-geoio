@@ -152,7 +152,7 @@ def _get_geometry_types(series: gpd.GeoSeries) -> list[str]:
     return sorted([_geometry_type_names[idx] for idx in geometry_types])
 
 
-def read_geodataframe(
+def read_dataframe(
     gcs_path: str | Iterable[str],
     file_format: FileFormat | None = None,
     columns: list[str] | None = None,
@@ -211,7 +211,6 @@ def read_geodataframe(
                 raise e
 
             gcs_path = _remove_prefix(gcs_path)
-
             filesystem = FileClient.get_gcs_file_system()
             with filesystem.open(gcs_path, "rb") as buffer:
                 pyogrio.read_dataframe(
@@ -223,7 +222,7 @@ def read_geodataframe(
                 )
 
 
-def write_geodataframe(
+def write_dataframe(
     gdf: gpd.GeoDataFrame,
     gcs_path: str,
     file_format: FileFormat | None = None,

@@ -10,8 +10,8 @@ from pandas.testing import assert_frame_equal
 from pytest_mock import MockerFixture
 from shapely import Point
 
-from dapla_geoio import read_geodataframe
-from dapla_geoio import write_geodataframe
+from dapla_geoio.io import read_dataframe
+from dapla_geoio.io import write_dataframe
 
 punktserie = gpd.GeoSeries([Point((1, 2)), Point((2, 3)), Point((3, 4))])
 punkdataframe = gpd.GeoDataFrame({"poi": ("a", "b", "c")}, geometry=punktserie)
@@ -52,9 +52,7 @@ def test_read_parquet(mocker: MockerFixture) -> None:
     file_client_mock = mocker.patch("dapla_geoio.io.FileClient")
     file_client_mock.get_gcs_file_system.return_value = LocalFileSystem()
 
-    lestdataframe = read_geodataframe(
-        str(pathlib.Path("tests", "data", "points.parquet"))
-    )
+    lestdataframe = read_dataframe(str(pathlib.Path("tests", "data", "points.parquet")))
     assert_frame_equal(punkdataframe, lestdataframe)
 
 
@@ -62,7 +60,7 @@ def test_write_parquet(mocker: MockerFixture, parquetfile_path: str) -> None:
     file_client_mock = mocker.patch("dapla_geoio.io.FileClient")
     file_client_mock.get_gcs_file_system.return_value = LocalFileSystem()
 
-    write_geodataframe(punkdataframe, parquetfile_path)
+    write_dataframe(punkdataframe, parquetfile_path)
     assert os.path.exists(parquetfile_path)
 
 
@@ -70,8 +68,8 @@ def test_roundtrip_parquet(mocker: MockerFixture, parquetfile_path: str) -> None
     file_client_mock = mocker.patch("dapla_geoio.io.FileClient")
     file_client_mock.get_gcs_file_system.return_value = LocalFileSystem()
 
-    write_geodataframe(punkdataframe, parquetfile_path)
-    roundtrip = read_geodataframe(parquetfile_path)
+    write_dataframe(punkdataframe, parquetfile_path)
+    roundtrip = read_dataframe(parquetfile_path)
     assert_frame_equal(punkdataframe, roundtrip)
 
 
@@ -83,7 +81,7 @@ def test_write_shp(mocker: MockerFixture, shpfile_path: str) -> None:
     ensure_mock = mocker.patch("dapla_geoio.io._ensure_gs_vsi_prefix")
     ensure_mock.side_effect = lambda x: x
 
-    write_geodataframe(punkdataframe, shpfile_path)
+    write_dataframe(punkdataframe, shpfile_path)
     assert os.path.exists(shpfile_path)
 
 
@@ -91,7 +89,7 @@ def test_write_geojson(mocker: MockerFixture, jsonfile_path: str) -> None:
     file_client_mock = mocker.patch("dapla_geoio.io.FileClient")
     file_client_mock.get_gcs_file_system.return_value = LocalFileSystem()
 
-    write_geodataframe(punkdataframe, jsonfile_path)
+    write_dataframe(punkdataframe, jsonfile_path)
     assert os.path.exists(jsonfile_path)
 
 
@@ -103,5 +101,5 @@ def test_write_gpkg(mocker: MockerFixture, gpkgfile_path: str) -> None:
     ensure_mock = mocker.patch("dapla_geoio.io._ensure_gs_vsi_prefix")
     ensure_mock.side_effect = lambda x: x
 
-    write_geodataframe(punkdataframe, gpkgfile_path)
+    write_dataframe(punkdataframe, gpkgfile_path)
     assert os.path.exists(gpkgfile_path)
