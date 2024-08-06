@@ -96,8 +96,12 @@ def test_write_geojson(mocker: MockerFixture, jsonfile_path: str) -> None:
 
 
 def test_write_gpkg(mocker: MockerFixture, gpkgfile_path: str) -> None:
-    file_client_mock = mocker.patch("dapla_geoio.io.FileClient")
-    file_client_mock.get_gcs_file_system.return_value = LocalFileSystem()
+    mock_google_creds = mocker.Mock(spec=Credentials)
+    mock_google_creds.token = None
+    auth_client_mock = mocker.patch("dapla_geoio.io.AuthClient")
+    auth_client_mock.fetch_google_credentials.return_value = mock_google_creds
+    ensure_mock = mocker.patch("dapla_geoio.io._ensure_gs_vsi_prefix")
+    ensure_mock.side_effect = lambda x: x
 
     write_geodataframe(punkdataframe, gpkgfile_path)
     assert os.path.exists(gpkgfile_path)

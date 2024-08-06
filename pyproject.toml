@@ -20,6 +20,7 @@ geopandas = "^1.0.0"
 numpy = ">=1.26,<2.0"
 pyogrio = "^0.8.0"
 dapla-toolbelt = "^2.0.13"
+strenum = "^0.4.15"
 
 [tool.poetry.group.dev.dependencies]
 pygments = ">=2.10.0"

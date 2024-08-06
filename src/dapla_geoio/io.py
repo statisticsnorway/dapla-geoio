@@ -3,14 +3,15 @@ import json
 import shutil
 import sys
 from collections.abc import Iterable
-from enum import StrEnum
 from typing import Any
 from typing import Literal
 
 if sys.version_info >= (3, 11):
+    from enum import StrEnum
     from typing import Required
     from typing import TypedDict
 else:
+    from strenum import StrEnum
     from typing_extensions import Required
     from typing_extensions import TypedDict
 
@@ -19,6 +20,8 @@ import numpy as np
 import pandas as pd
 import pyarrow
 import pyogrio
+import pyogrio._err
+import pyogrio.errors
 import shapely
 from dapla import AuthClient
 from dapla import FileClient
@@ -42,7 +45,7 @@ _geometry_type_names = [
 _geometry_type_names.extend([geom_type + " Z" for geom_type in _geometry_type_names])
 
 
-def homogen_geometri(geoserie: gpd.GeoSeries) -> bool:
+def homogen_geometri(geoserie: gpd.GeoSeries) -> bool | np.bool_:
     """Sjekker at alle elementer i serien har lik geometritype og ikke er av typen GeometryCollection."""
     notnamaske = geoserie.notna()
     if not notnamaske.any():
@@ -51,7 +54,7 @@ def homogen_geometri(geoserie: gpd.GeoSeries) -> bool:
         )
 
     notna = geoserie[notnamaske]
-    første = notna.iat[0]
+    første: shapely.geometry.base.BaseGeometry = notna.iat[0]
     return (
         første.geom_type != "GeometryCollection"
         and (notna.geom_type == første.geom_type).all()
@@ -156,7 +159,7 @@ def read_geodataframe(
     # filters: list[tuple | list[tuple]] | pyarrow.compute.Expression | None = None,
     geometry_column: str | None = None,
     **kwargs: Any,
-) -> gpd.GeoDataFrame:
+) -> gpd.GeoDataFrame | pd.DataFrame:
     """Leser inn en fil som innholder geometri til en Geopandas geodataframe.
 
     Støtter geoparquetfiler med WKB kodet geometri og partisjonerte geoparquetfiler.
@@ -164,24 +167,27 @@ def read_geodataframe(
     """
     if file_format is None:
         if isinstance(gcs_path, str):
-            if gcs_path.endswith(".parquet"):
-                file_format = FileFormat.PARQUET
-        else:
-            if all(path.endswith(".parquet") for path in gcs_path):
-                file_format = FileFormat.PARQUET
+            extension = gcs_path.rpartition(".")[-1]
+            file_format = filextension2format.get(extension)
+
+        elif all(path.endswith(".parquet") for path in gcs_path):
+            file_format = FileFormat.PARQUET
 
     if file_format == FileFormat.PARQUET:
         filesystem = FileClient.get_gcs_file_system()
 
         if isinstance(gcs_path, str):
             gcs_path = _remove_prefix(gcs_path)
+            return gpd.read_parquet(
+                gcs_path, columns=columns, filesystem=filesystem, **kwargs
+            )
         else:
             gcs_path = [_remove_prefix(file) for file in gcs_path]
 
-        arrow_table = parquet.ParquetDataset(gcs_path, filesystem=filesystem).read(
-            columns=columns, use_pandas_metadata=True
-        )
-        return _arrow_til_geopandas(arrow_table, geometry_column)
+            arrow_table = parquet.ParquetDataset(gcs_path, filesystem=filesystem).read(
+                columns=columns, use_pandas_metadata=True
+            )
+            return _arrow_til_geopandas(arrow_table, geometry_column)
 
     else:
         if not isinstance(gcs_path, str):
@@ -190,13 +196,31 @@ def read_geodataframe(
         set_gdal_auth()
         path = _ensure_gs_vsi_prefix(gcs_path)
 
-        return pyogrio.read_dataframe(
-            path,
-            columns=columns,
-            driver=(str(file_format) if file_format else None),
-            use_arrow=True,
-            **kwargs,
-        )
+        try:
+            return pyogrio.read_dataframe(
+                path,
+                columns=columns,
+                driver=(str(file_format) if file_format else None),
+                use_arrow=True,
+                **kwargs,
+            )
+        except (pyogrio.errors.DataLayerError, pyogrio._err.CPLE_AppDefinedError) as e:
+            # Reserve metode.
+            # Fungerer ikke med formater som må lese fra flere filer.
+            if file_format in {FileFormat.SHAPEFILE, FileFormat.FILEGDB}:
+                raise e
+
+            gcs_path = _remove_prefix(gcs_path)
+
+            filesystem = FileClient.get_gcs_file_system()
+            with filesystem.open(gcs_path, "rb") as buffer:
+                pyogrio.read_dataframe(
+                    buffer,
+                    buffer,
+                    driver=(str(file_format) if file_format else None),
+                    use_arrow=True,
+                    **kwargs,
+                )
 
 
 def write_geodataframe(
@@ -239,33 +263,39 @@ def write_geodataframe(
         with filesystem.open(gcs_path, "w", encoding="utf-8") as file:
             file.write(feature_collection)
 
-    elif file_format in {FileFormat.GEOPACKAGE, FileFormat.FLATGEOBUFFER}:
-        gcs_path = _remove_prefix(gcs_path)
+    else:
+        set_gdal_auth()
+        path = _ensure_gs_vsi_prefix(gcs_path)
 
-        with io.BytesIO() as buffer:
+        try:
             pyogrio.write_dataframe(
                 gdf,
-                buffer,
+                path,
                 driver=(str(file_format) if file_format else None),
                 use_arrow=True,
                 **kwargs,
             )
 
-            filesystem = FileClient.get_gcs_file_system()
-            with filesystem.open(gcs_path, "wb") as file:
-                shutil.copyfileobj(buffer, file)
+        except (pyogrio.errors.DataLayerError, pyogrio._err.CPLE_AppDefinedError) as e:
+            # Reserve metode, først skrive til BytesIO, så til fil.
+            # Fungerer ikke med formater som må skrive til flere filer.
+            if file_format in {FileFormat.SHAPEFILE, FileFormat.FILEGDB}:
+                raise e
 
-    else:
-        set_gdal_auth()
-        path = _ensure_gs_vsi_prefix(gcs_path)
+            gcs_path = _remove_prefix(gcs_path)
 
-        pyogrio.write_dataframe(
-            gdf,
-            path,
-            driver=(str(file_format) if file_format else None),
-            use_arrow=True,
-            **kwargs,
-        )
+            with io.BytesIO() as buffer:
+                pyogrio.write_dataframe(
+                    gdf,
+                    buffer,
+                    driver=(str(file_format) if file_format else None),
+                    use_arrow=True,
+                    **kwargs,
+                )
+
+                filesystem = FileClient.get_gcs_file_system()
+                with filesystem.open(gcs_path, "wb") as file:
+                    shutil.copyfileobj(buffer, file)
 
 
 def get_parquet_files_in_folder(folder: str) -> list[str]:
@@ -293,6 +323,7 @@ def _geopandas_to_arrow(gdf: gpd.GeoDataFrame) -> pyarrow.Table:
 
     for i, geo_column in zip(geometry_indices, geometry_columns, strict=False):
         geo_series = gdf[geo_column]
+        # Bruker geoarrow koding på alle kolonner hvor det er mulig, og WKB ellers.
         encoding = "geoarrow" if homogen_geometri(geo_series) else "WKB"
 
         if encoding == "geoarrow":
@@ -344,21 +375,17 @@ def _arrow_til_geopandas(
             use dapla.read_pandas() instead."""
         )
 
-    table_attr = arrow_table.drop(geometry_columns)
-    df = table_attr.to_pandas()
-
     geometry_column = (
         geometry_metadata["primary_column"] if not geometry_column else geometry_column
     )
 
     # Missing geometry likely indicates a subset of columns was read;
-    # promote the first available geometry to the primary geometry.
     if geometry_column not in geometry_columns:
         raise ValueError(
             "Geometry column not in columns read from the Parquet/Feather file."
         )
 
-    table_attr = arrow_table.drop(geometry_columns)
+    table_attr = arrow_table.drop(geometry_columns)  # type: ignore[attr-defined]
     df = table_attr.to_pandas()
 
     # Convert the WKB columns that are present back to geometry.

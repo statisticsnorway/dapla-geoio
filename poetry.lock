@@ -2678,12 +2678,12 @@ numpy = ">=1.16.6"
 
 [[package]]
 name = "pyarrow-stubs"
-version = "10.0.1.7"
+version = "10.0.1.9"
 description = "Type annotations for pyarrow"
 optional = false
-python-versions = ">=3.7,<4.0"
+python-versions = "<4.0,>=3.7"
 files = [
-    {file = "pyarrow_stubs-10.0.1.7-py3-none-any.whl", hash = "sha256:cccc7a46eddeea4e3cb85330eb8972c116a615da6188b8ae1f7a44cb724b21ac"},
+    {file = "pyarrow_stubs-10.0.1.9-py3-none-any.whl", hash = "sha256:8d6b200d1a70ec42bab8efb65c2f0655cc964ad25b917fbd82dd7731b37c0722"},
 ]
 
 [[package]]
@@ -3940,6 +3940,22 @@ anyio = ">=3.4.0,<5"
 full = ["httpx (>=0.22.0)", "itsdangerous", "jinja2", "python-multipart (>=0.0.7)", "pyyaml"]
 
 [[package]]
+name = "strenum"
+version = "0.4.15"
+description = "An Enum that inherits from str."
+optional = false
+python-versions = "*"
+files = [
+    {file = "StrEnum-0.4.15-py3-none-any.whl", hash = "sha256:a30cda4af7cc6b5bf52c8055bc4bf4b2b6b14a93b574626da33df53cf7740659"},
+    {file = "StrEnum-0.4.15.tar.gz", hash = "sha256:878fb5ab705442070e4dd1929bb5e2249511c0bcf2b0eeacf3bcd80875c82eff"},
+]
+
+[package.extras]
+docs = ["myst-parser[linkify]", "sphinx", "sphinx-rtd-theme"]
+release = ["twine"]
+test = ["pylint", "pytest", "pytest-black", "pytest-cov", "pytest-pylint"]
+
+[[package]]
 name = "tokenize-rt"
 version = "5.2.0"
 description = "A wrapper around the stdlib `tokenize` which roundtrips."
@@ -4496,4 +4512,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "779ff9e478f56a87a16d97f01fe19098549f674cd3211c1c15e417becddcbde9"
+content-hash = "635fd553e39ce84c45b725fbd4ca432713c6de36d80034a65b1810255f6c03ee"
