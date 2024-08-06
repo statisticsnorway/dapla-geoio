@@ -213,9 +213,9 @@ def read_dataframe(
             gcs_path = _remove_prefix(gcs_path)
             filesystem = FileClient.get_gcs_file_system()
             with filesystem.open(gcs_path, "rb") as buffer:
-                pyogrio.read_dataframe(
+                return pyogrio.read_dataframe(
                     buffer,
-                    buffer,
+                    columns=columns,
                     driver=(str(file_format) if file_format else None),
                     use_arrow=True,
                     **kwargs,
