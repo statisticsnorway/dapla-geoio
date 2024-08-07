@@ -1,6 +1,7 @@
 [tool.poetry]
-name = "dapla-geoio"
-version = "0.0.1"
+name = "ssb-dapla-geoio"
+packages = [{include = "dapla_geoio", from = "src"}]
+version = "0.0.2"
 description = "Dapla GeoIO"
 authors = ["Bjørn Lie Rapp <bjorn.rapp@ssb.no>"]
 license = "MIT"
@@ -15,10 +16,11 @@ Changelog = "https://github.com/statisticsnorway/dapla-geoio/releases"
 
 [tool.poetry.dependencies]
 python = "^3.10"
-geopandas = "^0.14.4"
+geopandas = "^1.0.0"
 numpy = ">=1.26,<2.0"
 pyogrio = "^0.8.0"
 dapla-toolbelt = "^2.0.13"
+strenum = "^0.4.15"
 
 [tool.poetry.group.dev.dependencies]
 pygments = ">=2.10.0"
@@ -31,9 +33,15 @@ pre-commit-hooks = ">=4.1.0"
 ruff = ">=0.0.284"
 typeguard = ">=2.13.3"
 xdoctest = { extras = ["colors"], version = ">=0.15.10" }
-pandas-stubs = "^2.2.2.240603"
+
+[tool.poetry.group.test.dependencies]
 pytest = ">=6.2.5"
 pytest-mock = "^3.14.0"
+
+[tool.poetry.group.type-stubs.dependencies]
+types-shapely = "^2.0.0.20240618"
+pandas-stubs = "^2.2.2.240603"
+pyarrow-stubs = "^10.0.1.7"
 
 [tool.poetry.group.docs.dependencies]
 sphinx = ">=6.2.1"
@@ -47,7 +55,7 @@ myst-parser = { version = ">=0.16.1" }
 pythonpath = ["src"]
 
 [tool.poetry.scripts]
-dapla-geoio = "dapla_geoio.__main__:main"
+ssb-dapla-geoio = "dapla_geoio.__main__:main"
 
 [tool.coverage.paths]
 source = ["src", "*/site-packages"]
@@ -68,6 +76,14 @@ warn_unreachable = true
 pretty = true
 show_column_numbers = true
 show_error_context = true
+
+[[tool.mypy.overrides]]
+module = [
+    "geopandas.*",
+    "pyogrio.*",
+    "fsspec.*"
+]
+ignore_missing_imports = true
 
 [tool.ruff]
 force-exclude = true  # Apply excludes to pre-commit

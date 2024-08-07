@@ -74,7 +74,7 @@ You can now run an interactive Python session, or your app:
 
 ```console
 poetry run python
-poetry run dapla-geoio
+poetry run ssb-dapla-geoio
 ```
 
 ## How to test the project

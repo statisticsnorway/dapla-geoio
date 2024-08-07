@@ -4,7 +4,7 @@
   "checkout": null,
   "context": {
     "cookiecutter": {
-      "project_name": "dapla-geoio",
+      "project_name": "ssb-dapla-geoio",
       "package_name": "dapla_geoio",
       "friendly_name": "Dapla GeoIO",
       "copyright_owner": "Statistics Norway",
