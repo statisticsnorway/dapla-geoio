@@ -278,7 +278,7 @@ def write_dataframe(
         except (pyogrio.errors.DataLayerError, pyogrio._err.CPLE_AppDefinedError) as e:
             # Reserve metode, først skrive til BytesIO, så til fil.
             # Fungerer ikke med formater som må skrive til flere filer.
-            if file_format in {FileFormat.SHAPEFILE, FileFormat.FILEGDB}:
+            if file_format in {FileFormat.SHAPEFILE, FileFormat.FILEGDB, None}:
                 raise e
 
             gcs_path = _remove_prefix(gcs_path)
@@ -287,7 +287,7 @@ def write_dataframe(
                 pyogrio.write_dataframe(
                     gdf,
                     buffer,
-                    driver=(str(file_format) if file_format else None),
+                    driver=str(file_format),
                     use_arrow=True,
                     **kwargs,
                 )
