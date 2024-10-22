@@ -1,9 +1,9 @@
 # Dapla GeoIO
 
-[![PyPI](https://img.shields.io/pypi/v/dapla-geoio.svg)][pypi status]
-[![Status](https://img.shields.io/pypi/status/dapla-geoio.svg)][pypi status]
-[![Python Version](https://img.shields.io/pypi/pyversions/dapla-geoio)][pypi status]
-[![License](https://img.shields.io/pypi/l/dapla-geoio)][license]
+[![PyPI](https://img.shields.io/pypi/v/ssb-dapla-geoio.svg)][pypi status]
+[![Status](https://img.shields.io/pypi/status/ssb-dapla-geoio.svg)][pypi status]
+[![Python Version](https://img.shields.io/pypi/pyversions/ssb-dapla-geoio)][pypi status]
+[![License](https://img.shields.io/pypi/l/ssb-dapla-geoio)][license]
 
 [![Documentation](https://github.com/statisticsnorway/dapla-geoio/actions/workflows/docs.yml/badge.svg)][documentation]
 [![Tests](https://github.com/statisticsnorway/dapla-geoio/actions/workflows/tests.yml/badge.svg)][tests]
@@ -15,7 +15,7 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)][poetry]
 
-[pypi status]: https://pypi.org/project/dapla-geoio/
+[pypi status]: https://pypi.org/project/ssb-dapla-geoio/
 [documentation]: https://statisticsnorway.github.io/dapla-geoio
 [tests]: https://github.com/statisticsnorway/dapla-geoio/actions?workflow=Tests
 
