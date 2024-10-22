@@ -15,7 +15,7 @@ classifiers = ["Development Status :: 2 - Pre-Alpha"]
 Changelog = "https://github.com/statisticsnorway/dapla-geoio/releases"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.10"
 geopandas = "^1.0.0"
 numpy = ">=1.26,<2.0"
 pyogrio = "^0.8.0"
