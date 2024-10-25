@@ -339,7 +339,7 @@ def _geopandas_to_arrow(gdf: gpd.GeoDataFrame) -> pyarrow.Table:
             )
 
         elif encoding == "WKB":
-            construct_wkb_array(
+            field, geom_arr = construct_wkb_array(
                 np.asarray(geo_series.array), field_name=geo_column, crs=gdf.crs
             )
             geometry_encoding_dict[geo_column] = encoding
