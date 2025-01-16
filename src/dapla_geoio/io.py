@@ -102,14 +102,13 @@ class _GeoParquetMetadata(TypedDict):
 
 def set_gdal_auth() -> None:
     """Setter miljøvariabler for GDAL."""
-    credentials = AuthClient.fetch_google_credentials()
+    options: dict[str, str | bool] = {"CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE": True}
 
-    pyogrio.set_gdal_config_options(
-        {
-            "GDAL_HTTP_HEADERS": f"Authorization: Bearer {credentials.token}",
-            "CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE": True,
-        }
-    )
+    credentials = AuthClient.fetch_google_credentials()
+    if credentials.token:
+        options["GDAL_HTTP_HEADERS"] = f"Authorization: Bearer {credentials.token}"
+
+    pyogrio.set_gdal_config_options(options)
 
 
 def _ensure_gs_vsi_prefix(gcs_path: str) -> str:
@@ -184,7 +183,7 @@ def read_dataframe(
         else:
             gcs_path = [_remove_prefix(file) for file in gcs_path]
 
-            arrow_table = parquet.ParquetDataset(gcs_path, filesystem=filesystem).read(
+            arrow_table = parquet.ParquetDataset(gcs_path, filesystem=filesystem).read(  # type: ignore[arg-type]
                 columns=columns, use_pandas_metadata=True
             )
             return _arrow_til_geopandas(arrow_table, geometry_column)
@@ -204,7 +203,11 @@ def read_dataframe(
                 use_arrow=True,
                 **kwargs,
             )
-        except (pyogrio.errors.DataLayerError, pyogrio._err.CPLE_AppDefinedError) as e:
+        except (
+            pyogrio.errors.DataSourceError,
+            pyogrio.errors.DataLayerError,
+            pyogrio._err.CPLE_AppDefinedError,
+        ) as e:
             # Reserve metode.
             # Fungerer ikke med formater som må lese fra flere filer.
             if file_format in {FileFormat.SHAPEFILE, FileFormat.FILEGDB}:
@@ -275,7 +278,11 @@ def write_dataframe(
                 **kwargs,
             )
 
-        except (pyogrio.errors.DataLayerError, pyogrio._err.CPLE_AppDefinedError) as e:
+        except (
+            pyogrio.errors.DataSourceError,
+            pyogrio.errors.DataLayerError,
+            pyogrio._err.CPLE_AppDefinedError,
+        ) as e:
             # Reserve metode, først skrive til BytesIO, så til fil.
             # Fungerer ikke med formater som må skrive til flere filer.
             if file_format in {FileFormat.SHAPEFILE, FileFormat.FILEGDB, None}:
@@ -352,7 +359,7 @@ def _geopandas_to_arrow(gdf: gpd.GeoDataFrame) -> pyarrow.Table:
     metadata = table.schema.metadata if table.schema.metadata else {}
     metadata.update({b"geo": json.dumps(geo_metadata).encode("utf-8")})
 
-    return table.replace_schema_metadata(metadata)  # type: ignore[arg-type]
+    return table.replace_schema_metadata(metadata)
 
 
 def _arrow_til_geopandas(
@@ -384,7 +391,7 @@ def _arrow_til_geopandas(
             "Geometry column not in columns read from the Parquet/Feather file."
         )
 
-    table_attr = arrow_table.drop(geometry_columns)  # type: ignore[attr-defined]
+    table_attr = arrow_table.drop(geometry_columns)
     df = table_attr.to_pandas()
 
     # Convert the WKB columns that are present back to geometry.
@@ -451,15 +458,6 @@ def _create_metadata(
         if np.isfinite(bbox).all():
             # don't add bbox with NaNs for empty / all-NA geometry column
             column_metadata["bbox"] = bbox
-
-        column_metadata["covering"] = {
-            "bbox": {
-                "xmin": ["bbox", "xmin"],
-                "ymin": ["bbox", "ymin"],
-                "xmax": ["bbox", "xmax"],
-                "ymax": ["bbox", "ymax"],
-            },
-        }
 
         columns_metadata[col] = column_metadata
 

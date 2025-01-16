@@ -18,8 +18,8 @@ Changelog = "https://github.com/statisticsnorway/dapla-geoio/releases"
 python = "^3.10"
 geopandas = "^1.0.0"
 numpy = ">=1.26,<2.0"
-pyogrio = "^0.8.0"
-dapla-toolbelt = "^3.0"
+pyogrio = "^0.10.0"
+dapla-toolbelt = "^3.2.2"
 strenum = "^0.4.15"
 
 [tool.poetry.group.dev.dependencies]
@@ -41,7 +41,7 @@ pytest-mock = "^3.14.0"
 [tool.poetry.group.type-stubs.dependencies]
 types-shapely = "^2.0.0.20240618"
 pandas-stubs = "^2.2.2.240603"
-pyarrow-stubs = "^10.0.1.7"
+pyarrow-stubs = "^17.14"
 
 [tool.poetry.group.docs.dependencies]
 sphinx = ">=6.2.1"
@@ -114,6 +114,7 @@ select = [
     "RUF",  # the ruff developer's own rules
 ]
 ignore = [
+    "A005",
     "ANN003", # Supress Missing type annotation for `**kwargs`
     "ANN401", # Allow type annotation with type Any.
     "D100",   # Supress undocumented-public-module. Only doc of public api required.
