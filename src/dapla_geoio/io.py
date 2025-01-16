@@ -451,15 +451,6 @@ def _create_metadata(
             # don't add bbox with NaNs for empty / all-NA geometry column
             column_metadata["bbox"] = bbox
 
-        column_metadata["covering"] = {
-            "bbox": {
-                "xmin": ["bbox", "xmin"],
-                "ymin": ["bbox", "ymin"],
-                "xmax": ["bbox", "xmax"],
-                "ymax": ["bbox", "ymax"],
-            },
-        }
-
         columns_metadata[col] = column_metadata
 
     return {
