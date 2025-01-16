@@ -102,14 +102,13 @@ class _GeoParquetMetadata(TypedDict):
 
 def set_gdal_auth() -> None:
     """Setter miljøvariabler for GDAL."""
-    credentials = AuthClient.fetch_google_credentials()
+    options: dict[str, str | bool] = {"CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE": True}
 
-    pyogrio.set_gdal_config_options(
-        {
-            "GDAL_HTTP_HEADERS": f"Authorization: Bearer {credentials.token}",
-            "CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE": True,
-        }
-    )
+    credentials = AuthClient.fetch_google_credentials()
+    if credentials.token:
+        options["GDAL_HTTP_HEADERS"] = f"Authorization: Bearer {credentials.token}"
+
+    pyogrio.set_gdal_config_options(options)
 
 
 def _ensure_gs_vsi_prefix(gcs_path: str) -> str:
