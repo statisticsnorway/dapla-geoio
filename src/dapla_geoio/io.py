@@ -183,7 +183,7 @@ def read_dataframe(
         else:
             gcs_path = [_remove_prefix(file) for file in gcs_path]
 
-            arrow_table = parquet.ParquetDataset(gcs_path, filesystem=filesystem).read( # type: ignore[arg-type]
+            arrow_table = parquet.ParquetDataset(gcs_path, filesystem=filesystem).read(  # type: ignore[arg-type]
                 columns=columns, use_pandas_metadata=True
             )
             return _arrow_til_geopandas(arrow_table, geometry_column)
