@@ -359,7 +359,7 @@ def _geopandas_to_arrow(gdf: gpd.GeoDataFrame) -> pyarrow.Table:
     metadata = table.schema.metadata if table.schema.metadata else {}
     metadata.update({b"geo": json.dumps(geo_metadata).encode("utf-8")})
 
-    return table.replace_schema_metadata(metadata)  # type: ignore[arg-type]
+    return table.replace_schema_metadata(metadata)
 
 
 def _arrow_til_geopandas(
@@ -391,7 +391,7 @@ def _arrow_til_geopandas(
             "Geometry column not in columns read from the Parquet/Feather file."
         )
 
-    table_attr = arrow_table.drop(geometry_columns)  # type: ignore[attr-defined]
+    table_attr = arrow_table.drop(geometry_columns)
     df = table_attr.to_pandas()
 
     # Convert the WKB columns that are present back to geometry.
