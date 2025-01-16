@@ -203,7 +203,11 @@ def read_dataframe(
                 use_arrow=True,
                 **kwargs,
             )
-        except (pyogrio.errors.DataLayerError, pyogrio._err.CPLE_AppDefinedError) as e:
+        except (
+            pyogrio.errors.DataSourceError,
+            pyogrio.errors.DataLayerError,
+            pyogrio._err.CPLE_AppDefinedError,
+        ) as e:
             # Reserve metode.
             # Fungerer ikke med formater som må lese fra flere filer.
             if file_format in {FileFormat.SHAPEFILE, FileFormat.FILEGDB}:
@@ -274,7 +278,11 @@ def write_dataframe(
                 **kwargs,
             )
 
-        except (pyogrio.errors.DataLayerError, pyogrio._err.CPLE_AppDefinedError) as e:
+        except (
+            pyogrio.errors.DataSourceError,
+            pyogrio.errors.DataLayerError,
+            pyogrio._err.CPLE_AppDefinedError,
+        ) as e:
             # Reserve metode, først skrive til BytesIO, så til fil.
             # Fungerer ikke med formater som må skrive til flere filer.
             if file_format in {FileFormat.SHAPEFILE, FileFormat.FILEGDB, None}:
