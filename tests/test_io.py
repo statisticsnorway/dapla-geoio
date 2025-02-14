@@ -60,7 +60,9 @@ def test_read_parquet_bbox(mocker: MockerFixture) -> None:
     file_client_mock = mocker.patch("dapla_geoio.io.FileClient")
     file_client_mock.get_gcs_file_system.return_value = LocalFileSystem()
 
-    lestdataframe = read_dataframe(str(Path("tests", "data", "points.parquet")), bbox=[0.5, 1.5, 2.5, 3.5])
+    lestdataframe = read_dataframe(
+        str(Path("tests", "data", "points.parquet")), bbox=[0.5, 1.5, 2.5, 3.5]
+    )
     assert_frame_equal(punkdataframe.iloc[:2], lestdataframe)
 
 
