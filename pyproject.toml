@@ -16,7 +16,7 @@ Changelog = "https://github.com/statisticsnorway/dapla-geoio/releases"
 
 [tool.poetry.dependencies]
 python = "^3.10"
-geopandas = "^1.0.0"
+geopandas = "^1.0.1"
 numpy = ">=1.26,<2.0"
 pyogrio = "^0.10.0"
 dapla-toolbelt = "^3.2.2"
@@ -40,8 +40,8 @@ pytest-mock = "^3.14.0"
 
 [tool.poetry.group.type-stubs.dependencies]
 types-shapely = "^2.0.0.20240618"
-pandas-stubs = "^2.2.2.240603"
-pyarrow-stubs = "^17.14"
+pandas-stubs = "^2.2.3.241126"
+pyarrow-stubs = "^17.16"
 
 [tool.poetry.group.docs.dependencies]
 sphinx = ">=6.2.1"
