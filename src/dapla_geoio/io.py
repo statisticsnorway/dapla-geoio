@@ -474,11 +474,10 @@ def _read_parquet(
     geometry_column: str | None = None,
 ) -> gpd.GeoDataFrame:
     fileformat = ds.ParquetFileFormat()
-    dataset = cast(
-        ds.FileSystemDataset,
-        ds.dataset(path_or_paths, filesystem=filesystem, format=fileformat),
+    dataset: ds.FileSystemDataset = ds.dataset(
+        path_or_paths, filesystem=filesystem, format=fileformat
     )
-    schema = cast(pyarrow.Schema, dataset.schema)
+    schema = dataset.schema
     metadata = schema.metadata if schema.metadata else {}
 
     if columns and b"pandas" in metadata:
@@ -523,7 +522,7 @@ def _read_parquet(
             raise ValueError("No parts of the dataset overlaps the given bounding box")
 
         dataset = ds.FileSystemDataset(
-            fragments,
+            fragments,  # type: ignore[arg-type]
             schema=dataset.schema,
             format=dataset.format,
             filesystem=dataset.filesystem,
@@ -542,7 +541,7 @@ def _read_parquet(
 def _arrow_til_geopandas(
     arrow_table: pyarrow.Table,
     geometry_metadata: _GeoParquetMetadata,
-    geometry_column: str,
+    geometry_column: str | None = None,
 ) -> gpd.GeoDataFrame:
     """Kopiert og tilpasset privat funksjon fra https://github.com/geopandas/geopandas/blob/9ad28395c0b094dbddd282a5bdf44900fe6650a1/geopandas/io/arrow.py."""
     geometry_columns = [
@@ -618,9 +617,7 @@ def _validate_geometry_metadata(
 
         if column_metadata[
             "encoding"
-        ] in GEOARROW_ENCODINGS and not pyarrow.types.is_struct(
-            schema.field_by_name(col).type
-        ):
+        ] in GEOARROW_ENCODINGS and not pyarrow.types.is_struct(schema.field(col).type):
             warnings.warn(
                 (
                     "Geoparquet files should not use the Geoarrow interleaved encoding"
