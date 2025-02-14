@@ -1,6 +1,6 @@
 import os
-import pathlib
 from collections.abc import Iterator
+from pathlib import Path
 
 import geopandas as gpd
 import pytest
@@ -15,45 +15,55 @@ from dapla_geoio.io import write_dataframe
 
 punktserie = gpd.GeoSeries([Point((1, 2)), Point((2, 3)), Point((3, 4))])
 punkdataframe = gpd.GeoDataFrame({"poi": ("a", "b", "c")}, geometry=punktserie)
-testdata_folder = pathlib.Path("tests", "data")
+testdata_folder = Path("tests", "data")
 
 
 @pytest.fixture
 def parquetfile_path() -> Iterator[str]:
-    path = str(testdata_folder / "pointsw.parquet")
-    yield path
-    os.remove(path)
+    path = testdata_folder / "pointsw.parquet"
+    yield str(path)
+    path.unlink()
 
 
 @pytest.fixture
 def jsonfile_path() -> Iterator[str]:
-    path = str(testdata_folder / "pointsw.json")
-    yield path
-    os.remove(path)
+    path = testdata_folder / "pointsw.json"
+    yield str(path)
+    path.unlink()
 
 
 @pytest.fixture
 def gpkgfile_path() -> Iterator[str]:
-    path = str(testdata_folder / "pointsw.gpkg")
-    yield path
-    os.remove(path)
+    path = testdata_folder / "pointsw.gpkg"
+    yield str(path)
+    path.unlink()
 
 
 @pytest.fixture
 def shpfile_path() -> Iterator[str]:
-    path = str(testdata_folder / "pointsw.shp")
-    yield path
-    os.remove(path)
+    path = testdata_folder / "pointsw.shp"
+    yield str(path)
+    path.unlink()
     for sidecar in ("pointsw.cpg", "pointsw.dbf", "pointsw.shx"):
-        os.remove(testdata_folder / sidecar)
+        (testdata_folder / sidecar).unlink()
 
 
 def test_read_parquet(mocker: MockerFixture) -> None:
     file_client_mock = mocker.patch("dapla_geoio.io.FileClient")
     file_client_mock.get_gcs_file_system.return_value = LocalFileSystem()
 
-    lestdataframe = read_dataframe(str(pathlib.Path("tests", "data", "points.parquet")))
+    lestdataframe = read_dataframe(str(Path("tests", "data", "points.parquet")))
     assert_frame_equal(punkdataframe, lestdataframe)
+
+
+def test_read_parquet_bbox(mocker: MockerFixture) -> None:
+    file_client_mock = mocker.patch("dapla_geoio.io.FileClient")
+    file_client_mock.get_gcs_file_system.return_value = LocalFileSystem()
+
+    lestdataframe = read_dataframe(
+        str(Path("tests", "data", "points.parquet")), bbox=[0.5, 1.5, 2.5, 3.5]
+    )
+    assert_frame_equal(punkdataframe.iloc[:2], lestdataframe)
 
 
 def test_write_parquet(mocker: MockerFixture, parquetfile_path: str) -> None:
