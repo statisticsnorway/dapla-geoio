@@ -6,10 +6,12 @@ import shutil
 import sys
 import warnings
 from collections.abc import Iterable
+from collections.abc import Iterator
 from typing import Any
 from typing import Literal
 from typing import NamedTuple
 from typing import cast
+from typing import overload
 
 if sys.version_info >= (3, 11):
     from enum import StrEnum
@@ -22,19 +24,18 @@ else:
     from typing_extensions import Self
     from typing_extensions import TypedDict
 
-import fsspec
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pyarrow
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
+import pyarrow.fs
 import pyogrio
 import pyogrio._err
 import pyogrio.errors
 import shapely
 from dapla import AuthClient
-from dapla import FileClient
 from geopandas.array import from_shapely
 from geopandas.array import from_wkb
 from geopandas.io._geoarrow import GEOARROW_ENCODINGS
@@ -42,6 +43,7 @@ from geopandas.io._geoarrow import construct_geometry_array
 from geopandas.io._geoarrow import construct_shapely_array
 from geopandas.io._geoarrow import construct_wkb_array
 from pyarrow import parquet
+from upath.implementations.cloud import GCSPath
 
 
 class _GeoParquetColumnMetadata(TypedDict, total=False):
@@ -61,7 +63,8 @@ class _GeoParquetMetadata(TypedDict):
     columns: dict[str, _GeoParquetColumnMetadata]
 
 
-_geometry_type_names = [
+GCSPREFIX = "gs://"
+_GEOMETRY_TYPE_NAMES = [
     "Point",
     "LineString",
     "LineString",
@@ -71,23 +74,7 @@ _geometry_type_names = [
     "MultiPolygon",
     "GeometryCollection",
 ]
-_geometry_type_names.extend([geom_type + " Z" for geom_type in _geometry_type_names])
-
-
-def homogen_geometri(geoserie: gpd.GeoSeries) -> bool | np.bool_:
-    """Sjekker at alle elementer i serien har lik geometritype og ikke er av typen GeometryCollection."""
-    notnamaske = geoserie.notna()
-    if not notnamaske.any():
-        raise RuntimeError(
-            f"The geometry column {geoserie.name} contains only empty rows"
-        )
-
-    notna = geoserie[notnamaske]
-    første: shapely.geometry.base.BaseGeometry = notna.iat[0]
-    return (
-        første.geom_type != "GeometryCollection"
-        and (notna.geom_type == første.geom_type).all()
-    )
+_GEOMETRY_TYPE_NAMES.extend([geom_type + " Z" for geom_type in _GEOMETRY_TYPE_NAMES])
 
 
 class BoundingBox(NamedTuple):
@@ -174,14 +161,30 @@ class FileFormat(StrEnum):
 
 
 filextension2format = {
-    "parquet": FileFormat.PARQUET,
-    "gpkg": FileFormat.GEOPACKAGE,
-    "fgb": FileFormat.FLATGEOBUFFER,
-    "json": FileFormat.GEOJSON,
-    "geojson": FileFormat.GEOJSON,
-    "shp": FileFormat.SHAPEFILE,
-    "gdb": FileFormat.FILEGDB,
+    ".parquet": FileFormat.PARQUET,
+    ".gpkg": FileFormat.GEOPACKAGE,
+    ".fgb": FileFormat.FLATGEOBUFFER,
+    ".json": FileFormat.GEOJSON,
+    ".geojson": FileFormat.GEOJSON,
+    ".shp": FileFormat.SHAPEFILE,
+    ".gdb": FileFormat.FILEGDB,
 }
+
+
+def homogen_geometri(geoserie: gpd.GeoSeries) -> bool | np.bool_:
+    """Sjekker at alle elementer i serien har lik geometritype og ikke er av typen GeometryCollection."""
+    notnamaske = geoserie.notna()
+    if not notnamaske.any():
+        raise RuntimeError(
+            f"The geometry column {geoserie.name} contains only empty rows"
+        )
+
+    notna = geoserie[notnamaske]
+    første: shapely.geometry.base.BaseGeometry = notna.iat[0]
+    return (
+        første.geom_type != "GeometryCollection"
+        and (notna.geom_type == første.geom_type).all()
+    )
 
 
 def set_gdal_auth() -> None:
@@ -195,30 +198,46 @@ def set_gdal_auth() -> None:
     pyogrio.set_gdal_config_options(options)
 
 
-def _ensure_gs_vsi_prefix(gcs_path: str) -> str:
+@overload
+def _ensure_gs_path(path_or_paths: str) -> GCSPath: ...
+
+
+@overload
+def _ensure_gs_path(path_or_paths: GCSPath) -> GCSPath: ...
+
+
+@overload
+def _ensure_gs_path(path_or_paths: Iterable[str]) -> list[GCSPath]: ...
+
+
+@overload
+def _ensure_gs_path(path_or_paths: Iterable[GCSPath]) -> list[GCSPath]: ...
+
+
+def _ensure_gs_path(
+    path_or_paths: str | GCSPath | Iterable[str] | Iterable[GCSPath],
+) -> GCSPath | list[GCSPath]:
+    if isinstance(path_or_paths, GCSPath):
+        return path_or_paths
+
+    elif isinstance(path_or_paths, str):
+        return cast(GCSPath, GCSPath(path_or_paths, protocol="gs"))
+
+    elif any(isinstance(path, GCSPath) for path in path_or_paths):
+        return cast(list[GCSPath], list(path_or_paths))
+
+    else:
+        return [cast(GCSPath, GCSPath(path, protocol="gs")) for path in path_or_paths]
+
+
+def _ensure_gs_vsi_prefix(gcs_path: GCSPath) -> str:
     """Legger til prefixet "/vsigs/" til filbanen.
 
-    GDAL har sitt eget virtuelle filsystem abstraksjons-skjema ulikt fsspec,
+    GDAL har sitt eget virtuelle fil-abstraksjons-system ulikt fsspec,
     som bruker prefixet /vsigs/ istedenfor gs://.
     https://gdal.org/user/virtual_file_systems.html
     """
-    if "/vsigs/" in gcs_path:
-        return gcs_path
-
-    if gcs_path.startswith(prefix := "gs://"):
-        return f"/vsigs/{gcs_path[len(prefix):]}"
-
-    return f"/vsigs/{gcs_path}"
-
-
-def _remove_prefix(gcs_path: str) -> str:
-    """Fjerner både prefikset /vsigs/ og gs:// fra filsti."""
-    for prefix in ["gs://", "/vsigs/"]:
-        if gcs_path.startswith(prefix):
-            return gcs_path[len(prefix) :]
-
-    else:
-        return gcs_path
+    return f"/vsigs/{str(gcs_path).removeprefix(GCSPREFIX)}"
 
 
 def _get_geometry_types(series: gpd.GeoSeries) -> list[str]:
@@ -232,11 +251,11 @@ def _get_geometry_types(series: gpd.GeoSeries) -> list[str]:
     if -1 in geometry_types:
         geometry_types.remove(-1)
 
-    return sorted([_geometry_type_names[idx] for idx in geometry_types])
+    return sorted([_GEOMETRY_TYPE_NAMES[idx] for idx in geometry_types])
 
 
 def read_dataframe(
-    path_or_paths: str | Iterable[str],
+    path_or_paths: str | GCSPath | Iterable[str] | Iterable[GCSPath],
     file_format: FileFormat | None = None,
     columns: list[str] | None = None,
     bbox: Iterable[float] | BoundingBox | None = None,
@@ -249,38 +268,32 @@ def read_dataframe(
     Støtter geoparquetfiler med WKB kodet geometri og partisjonerte geoparquetfiler.
     Bruker pyogrio til å lese andre filformater.
     """
+    gcs_path_or_paths = _ensure_gs_path(path_or_paths)
+
     if file_format is None:
-        if isinstance(path_or_paths, str):
-            extension = path_or_paths.rpartition(".")[-1]
+        if isinstance(gcs_path_or_paths, GCSPath):
+            extension = gcs_path_or_paths.suffix
             file_format = filextension2format.get(extension)
 
-        elif all(path.endswith(".parquet") for path in path_or_paths):
+        elif all(path.suffix == "parquet" for path in gcs_path_or_paths):
             file_format = FileFormat.PARQUET
 
     if file_format == FileFormat.PARQUET:
-        filesystem = FileClient.get_gcs_file_system()
-
-        if isinstance(path_or_paths, str):
-            path_or_paths = _remove_prefix(path_or_paths)
-
-        else:
-            path_or_paths = [_remove_prefix(file) for file in path_or_paths]
-
         return _read_parquet(
-            path_or_paths,
-            filesystem=filesystem,
+            gcs_path_or_paths,
             columns=columns,
             bbox=bbox,
             filters=filters,
             geometry_column=geometry_column,
+            **kwargs,
         )
 
     else:
-        if not isinstance(path_or_paths, str):
+        if not isinstance(gcs_path_or_paths, GCSPath):
             raise ValueError("Multiple paths are only supported for parquet format")
 
         set_gdal_auth()
-        vsi_path = _ensure_gs_vsi_prefix(path_or_paths)
+        vsi_path = _ensure_gs_vsi_prefix(gcs_path_or_paths)
 
         try:
             return pyogrio.read_dataframe(
@@ -301,9 +314,7 @@ def read_dataframe(
             if file_format in {FileFormat.SHAPEFILE, FileFormat.FILEGDB}:
                 raise e
 
-            path_or_paths = _remove_prefix(path_or_paths)
-            filesystem = FileClient.get_gcs_file_system()
-            with filesystem.open(path_or_paths, "rb") as buffer:
+            with gcs_path_or_paths.open("rb") as buffer:
                 return pyogrio.read_dataframe(
                     buffer,
                     bbox=bbox,
@@ -316,7 +327,7 @@ def read_dataframe(
 
 def write_dataframe(
     gdf: gpd.GeoDataFrame,
-    gcs_path: str,
+    path: str | GCSPath,
     file_format: FileFormat | None = None,
     **kwargs: Any,
 ) -> None:
@@ -325,17 +336,18 @@ def write_dataframe(
     Støtter  å skrive til geoparquetfiler med WKB kodet geometri, og
     bruker pyogrio til å lese andre filformater.
     """
+    gsc_path = _ensure_gs_path(path)
+
     if file_format is None:
-        extension = gcs_path.rpartition(".")[-1]
+        extension = gsc_path.suffix
         file_format = filextension2format.get(extension)
 
     if file_format == FileFormat.PARQUET:
-        filesystem = FileClient.get_gcs_file_system()
-        gcs_path = _remove_prefix(gcs_path)
+        filesystem = pyarrow.fs.GcsFileSystem()
         table = _geopandas_to_arrow(gdf)
         parquet.write_table(
             table,
-            where=gcs_path,
+            where=str(gsc_path),  # type: ignore[ArgumentType]
             filesystem=filesystem,
             compression="snappy",
             coerce_timestamps="ms",
@@ -346,22 +358,19 @@ def write_dataframe(
         if (gdf.dtypes == "geometry").sum() != 1:
             raise ValueError("The Geojson-format supports only on geometry column.")
 
-        gcs_path = _remove_prefix(gcs_path)
-
         feature_collection = gdf.to_json(ensure_ascii=False)
 
-        filesystem = FileClient.get_gcs_file_system()
-        with filesystem.open(gcs_path, "w", encoding="utf-8") as file:
+        with gsc_path.open("w", encoding="utf-8") as file:
             file.write(feature_collection)
 
     else:
         set_gdal_auth()
-        path = _ensure_gs_vsi_prefix(gcs_path)
+        vsi_path = _ensure_gs_vsi_prefix(gsc_path)
 
         try:
             pyogrio.write_dataframe(
                 gdf,
-                path,
+                vsi_path,
                 driver=(str(file_format) if file_format else None),
                 use_arrow=True,
                 **kwargs,
@@ -377,8 +386,6 @@ def write_dataframe(
             if file_format in {FileFormat.SHAPEFILE, FileFormat.FILEGDB, None}:
                 raise e
 
-            gcs_path = _remove_prefix(gcs_path)
-
             with io.BytesIO() as buffer:
                 pyogrio.write_dataframe(
                     gdf,
@@ -388,18 +395,17 @@ def write_dataframe(
                     **kwargs,
                 )
 
-                filesystem = FileClient.get_gcs_file_system()
-                with filesystem.open(gcs_path, "wb") as file:
+                with gsc_path.open("wb") as file:
                     shutil.copyfileobj(buffer, file)
 
 
-def get_parquet_files_in_folder(folder: str) -> list[str]:
+def get_parquet_files_in_folder(folder: str | GCSPath) -> list[GCSPath]:
     """Lister opp parquetfiler i en "mappe" i en Google cloud bøtte.
 
-    Nyttig hvis man har en partisjonert geoparquet fil.
+    Nyttig hvis man har flere geoparquet filer, men som ikke har «hive» partisjonering.
     """
-    file_paths = FileClient.ls(folder)
-    return list(filter(lambda p: p.endswith(".parquet"), file_paths))
+    file_paths = cast(Iterator[GCSPath], GCSPath(folder, protocol="gs").glob("**/*"))
+    return list(filter(lambda p: p.suffix == ".parquet", file_paths))
 
 
 def _geopandas_to_arrow(gdf: gpd.GeoDataFrame) -> pyarrow.Table:
@@ -465,17 +471,29 @@ def _filter_fragments_with_bbox(
 
 
 def _read_parquet(
-    path_or_paths: str | Iterable[str],
-    filesystem: fsspec.AbstractFileSystem,
+    path_or_paths: GCSPath | Iterable[GCSPath],
     *,
     columns: Iterable[str] | None = None,
     bbox: BoundingBox | Iterable[float] | None = None,
     filters: list[tuple] | list[list[tuple]] | pc.Expression | None = None,
     geometry_column: str | None = None,
+    schema: pyarrow.Schema | None = None,
 ) -> gpd.GeoDataFrame:
     fileformat = ds.ParquetFileFormat()
+    filesystem = pyarrow.fs.GcsFileSystem()
+    partitioning = ds.HivePartitioning.discover(infer_dictionary=True)
+
+    if isinstance(path_or_paths, GCSPath):
+        str_path_or_paths = str(object=path_or_paths)
+    else:
+        str_path_or_paths = [str(path) for path in path_or_paths]
+
     dataset: ds.FileSystemDataset = ds.dataset(
-        path_or_paths, filesystem=filesystem, format=fileformat
+        str_path_or_paths,
+        schema=schema,
+        format=fileformat,
+        filesystem=filesystem,
+        partitioning=partitioning,
     )
     schema = dataset.schema
     metadata = schema.metadata if schema.metadata else {}
@@ -507,12 +525,23 @@ def _read_parquet(
         if not isinstance(bbox, BoundingBox):
             bbox = BoundingBox(*bbox)
 
-        bbox_filter = bbox.get_parquet_bbox_filter(geometry_metadata, primary_column)
+        try:
+            bbox_filter = bbox.get_parquet_bbox_filter(
+                geometry_metadata, primary_column
+            )
 
-        if filters_expression:
-            filters = filters_expression & bbox_filter
+        except ValueError:
+            warnings.warn(
+                f"There is no covering column for geometry column {primary_column} Unable to filter rows",
+                stacklevel=4,
+            )
+
         else:
-            filters = bbox_filter
+            filters_expression = (
+                (filters_expression & bbox_filter)
+                if filters_expression
+                else bbox_filter
+            )
 
         fragments = _filter_fragments_with_bbox(
             dataset.get_fragments(), bbox=bbox, geometry_colum=primary_column
@@ -528,7 +557,7 @@ def _read_parquet(
             filesystem=dataset.filesystem,
         )
 
-    arrow_table = dataset.to_table(columns=columns, filter=filters)
+    arrow_table = dataset.to_table(columns=columns, filter=filters_expression)
 
     if b"pandas" in metadata:
         new_metadata = arrow_table.schema.metadata or {}
@@ -610,7 +639,6 @@ def _get_geometry_metadata(metadata: dict[bytes, bytes]) -> _GeoParquetMetadata:
 def _validate_geometry_metadata(
     geometadata: _GeoParquetMetadata, schema: pyarrow.Schema
 ) -> None:
-
     for col, column_metadata in geometadata["columns"].items():
         if col not in schema.names:
             raise ValueError("Geometry column in metadata don't exist in dataset")
