@@ -273,6 +273,7 @@ def read_dataframe(
             bbox=bbox,
             filters=filters,
             geometry_column=geometry_column,
+            **kwargs,
         )
 
     else:
@@ -472,10 +473,14 @@ def _read_parquet(
     bbox: BoundingBox | Iterable[float] | None = None,
     filters: list[tuple] | list[list[tuple]] | pc.Expression | None = None,
     geometry_column: str | None = None,
+    schema: pyarrow.Schema | None = None,
 ) -> gpd.GeoDataFrame:
     fileformat = ds.ParquetFileFormat()
     dataset: ds.FileSystemDataset = ds.dataset(
-        path_or_paths, filesystem=filesystem, format=fileformat
+        path_or_paths,
+        filesystem=filesystem,
+        format=fileformat,
+        schema=schema,
     )
     schema = dataset.schema
     metadata = schema.metadata if schema.metadata else {}
