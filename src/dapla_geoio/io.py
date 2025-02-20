@@ -477,11 +477,13 @@ def _read_parquet(
     schema: pyarrow.Schema | None = None,
 ) -> gpd.GeoDataFrame:
     fileformat = ds.ParquetFileFormat()
+    partitioning = ds.HivePartitioning.discover(infer_dictionary=True)
     dataset: ds.FileSystemDataset = ds.dataset(
         path_or_paths,
         filesystem=filesystem,
         format=fileformat,
         schema=schema,
+        partitioning=partitioning,
     )
     schema = dataset.schema
     metadata = schema.metadata if schema.metadata else {}
