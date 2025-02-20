@@ -625,9 +625,9 @@ def _validate_geometry_metadata(
         ] in GEOARROW_ENCODINGS and not pyarrow.types.is_struct(schema.field(col).type):
             warnings.warn(
                 (
-                    "Geoparquet files should not use the Geoarrow interleaved encoding"
-                    "A earlier version of this library used the wrong encoding."
-                    "The file will read, but you may be unable to filter the dataset"
+                    "Geoparquet files should not use the Geoarrow interleaved encoding.\n"
+                    "A earlier version of this library used the wrong encoding.\n"
+                    "The file will read, but you may be unable to filter the dataset."
                 ),
                 stacklevel=4,
             )
