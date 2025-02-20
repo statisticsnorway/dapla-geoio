@@ -6,6 +6,7 @@ import shutil
 import sys
 import warnings
 from collections.abc import Iterable
+from collections.abc import Sequence
 from typing import Any
 from typing import Literal
 from typing import NamedTuple
@@ -206,7 +207,7 @@ def _ensure_gs_vsi_prefix(gcs_path: str) -> str:
         return gcs_path
 
     if gcs_path.startswith(prefix := "gs://"):
-        return f"/vsigs/{gcs_path[len(prefix):]}"
+        return f"/vsigs/{gcs_path[len(prefix) :]}"
 
     return f"/vsigs/{gcs_path}"
 
@@ -466,7 +467,7 @@ def _filter_fragments_with_bbox(
 
 
 def _read_parquet(
-    path_or_paths: str | Iterable[str],
+    path_or_paths: str | Sequence[str],
     filesystem: fsspec.AbstractFileSystem,
     *,
     columns: Iterable[str] | None = None,
@@ -615,7 +616,6 @@ def _get_geometry_metadata(metadata: dict[bytes, bytes]) -> _GeoParquetMetadata:
 def _validate_geometry_metadata(
     geometadata: _GeoParquetMetadata, schema: pyarrow.Schema
 ) -> None:
-
     for col, column_metadata in geometadata["columns"].items():
         if col not in schema.names:
             raise ValueError("Geometry column in metadata don't exist in dataset")
