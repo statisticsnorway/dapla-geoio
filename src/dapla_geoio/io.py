@@ -507,7 +507,9 @@ def _read_parquet(
     ) or primary_column not in geometry_metadata["columns"].keys():
         raise ValueError("Geometry column not in columns read from the Parquet file.")
 
-    filters_expression = parquet.filters_to_expression(filters) if filters else None
+    filters_expression = (
+        parquet.filters_to_expression(filters) if filters is not None else None
+    )
 
     if bbox is not None:
         if not isinstance(bbox, BoundingBox):
@@ -515,10 +517,11 @@ def _read_parquet(
 
         bbox_filter = bbox.get_parquet_bbox_filter(geometry_metadata, primary_column)
 
-        if filters_expression:
-            filters = filters_expression & bbox_filter
-        else:
-            filters = bbox_filter
+        filters_expression = (
+            filters_expression & bbox_filter
+            if filters_expression is not None
+            else bbox_filter
+        )
 
         fragments = _filter_fragments_with_bbox(
             dataset.get_fragments(), bbox=bbox, geometry_colum=primary_column
@@ -534,7 +537,7 @@ def _read_parquet(
             filesystem=dataset.filesystem,
         )
 
-    arrow_table = dataset.to_table(columns=columns, filter=filters)
+    arrow_table = dataset.to_table(columns=columns, filter=filters_expression)
 
     if b"pandas" in metadata:
         new_metadata = arrow_table.schema.metadata or {}
