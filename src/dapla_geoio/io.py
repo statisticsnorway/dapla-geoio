@@ -34,6 +34,7 @@ import pyogrio.errors
 import shapely
 from dapla import AuthClient
 from dapla import FileClient
+from fsspec.implementations.arrow import ArrowFSWrapper
 from geopandas.array import from_shapely
 from geopandas.array import from_wkb
 from geopandas.io._geoarrow import GEOARROW_ENCODINGS
@@ -481,13 +482,50 @@ def _read_parquet(
     arrow_filesystem = fs.GcsFileSystem()
 
     try:
-    dataset: ds.FileSystemDataset = ds.dataset(
-        path_or_paths,
-        filesystem=arrow_filesystem,
-        format=fileformat,
-        schema=schema,
-        partitioning=partitioning,
-    )
+        dataset: ds.FileSystemDataset = ds.dataset(
+            path_or_paths,
+            filesystem=arrow_filesystem,
+            format=fileformat,
+            schema=schema,
+            partitioning=partitioning,
+        )
+
+    except pyarrow.ArrowTypeError as e:
+        # Pyarrow er streng på at skjemaet i et partisjonert datasett skal være likt for alle filer,
+        # når man ikke spesifiserer et.
+        # I enkle tilfeller forsøker vi hente skjema fra den første filen vi finner, og bruker det.
+        if schema is not None or not isinstance(path_or_paths, str):
+            raise e
+        filesystem = ArrowFSWrapper(arrow_filesystem)
+
+        if not filesystem.isdir(path_or_paths):
+            raise e
+
+        fragment_paths = cast(
+            list[str], filesystem.glob(f"{path_or_paths}/**/*.parquet", recursive=True)
+        )
+        parquet_file = parquet.ParquetFile(
+            fragment_paths[0], filesystem=arrow_filesystem
+        )
+
+        schema = parquet_file.schema_arrow
+
+        warnings.warn(
+            "Pyarrow was unable to merge schema for partioned dataset,\n"
+            "forced schema to be like first fragment found."
+            "Orignal error:\n"
+            f"{e}",
+            stacklevel=4,
+        )
+
+        dataset = ds.dataset(
+            path_or_paths,
+            filesystem=arrow_filesystem,
+            format=fileformat,
+            schema=schema,
+            partitioning=partitioning,
+        )
+
     schema = dataset.schema
     metadata = schema.metadata if schema.metadata else {}
 
