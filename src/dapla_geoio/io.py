@@ -6,21 +6,11 @@ import shutil
 import sys
 import warnings
 from collections.abc import Iterable
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Literal
 from typing import NamedTuple
 from typing import cast
-
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-    from typing import Required
-    from typing import Self
-    from typing import TypedDict
-else:
-    from strenum import StrEnum
-    from typing_extensions import Required
-    from typing_extensions import Self
-    from typing_extensions import TypedDict
 
 import geopandas as gpd
 import numpy as np
@@ -44,6 +34,20 @@ from geopandas.io._geoarrow import construct_wkb_array
 from pyarrow import fs
 from pyarrow import parquet
 
+if sys.version_info >= (3, 11):
+    from enum import StrEnum
+    from typing import Required
+    from typing import Self
+    from typing import TypedDict
+else:
+    from strenum import StrEnum
+    from typing_extensions import Required
+    from typing_extensions import Self
+    from typing_extensions import TypedDict
+
+if TYPE_CHECKING:
+    from pyarrow._stubs_typing import FilterTuple
+
 
 class _GeoParquetColumnMetadata(TypedDict, total=False):
     encoding: Required[str]
@@ -60,35 +64,6 @@ class _GeoParquetMetadata(TypedDict):
     version: str
     primary_column: str
     columns: dict[str, _GeoParquetColumnMetadata]
-
-
-_geometry_type_names = [
-    "Point",
-    "LineString",
-    "LineString",
-    "Polygon",
-    "MultiPoint",
-    "MultiLineString",
-    "MultiPolygon",
-    "GeometryCollection",
-]
-_geometry_type_names.extend([geom_type + " Z" for geom_type in _geometry_type_names])
-
-
-def homogen_geometri(geoserie: gpd.GeoSeries) -> bool | np.bool_:
-    """Sjekker at alle elementer i serien har lik geometritype og ikke er av typen GeometryCollection."""
-    notnamaske = geoserie.notna()
-    if not notnamaske.any():
-        raise RuntimeError(
-            f"The geometry column {geoserie.name} contains only empty rows"
-        )
-
-    notna = geoserie[notnamaske]
-    første: shapely.geometry.base.BaseGeometry = notna.iat[0]
-    return (
-        første.geom_type != "GeometryCollection"
-        and (notna.geom_type == første.geom_type).all()
-    )
 
 
 class BoundingBox(NamedTuple):
@@ -163,6 +138,19 @@ class BoundingBox(NamedTuple):
         return cls(*bbox)
 
 
+_GEOMETRY_TYPE_NAMES = [
+    "Point",
+    "LineString",
+    "LineString",
+    "Polygon",
+    "MultiPoint",
+    "MultiLineString",
+    "MultiPolygon",
+    "GeometryCollection",
+]
+_GEOMETRY_TYPE_NAMES.extend([geom_type + " Z" for geom_type in _GEOMETRY_TYPE_NAMES])
+
+
 class FileFormat(StrEnum):
     """En samling filformater som er garantert støttet."""
 
@@ -174,7 +162,7 @@ class FileFormat(StrEnum):
     SHAPEFILE = "ESRI Shapefile"
 
 
-filextension2format = {
+_FILE_EXTENSTION2FORMAT = {
     "parquet": FileFormat.PARQUET,
     "gpkg": FileFormat.GEOPACKAGE,
     "fgb": FileFormat.FLATGEOBUFFER,
@@ -183,6 +171,22 @@ filextension2format = {
     "shp": FileFormat.SHAPEFILE,
     "gdb": FileFormat.FILEGDB,
 }
+
+
+def homogen_geometri(geoserie: gpd.GeoSeries) -> bool | np.bool_:
+    """Sjekker at alle elementer i serien har lik geometritype og ikke er av typen GeometryCollection."""
+    notnamaske = geoserie.notna()
+    if not notnamaske.any():
+        raise RuntimeError(
+            f"The geometry column {geoserie.name} contains only empty rows"
+        )
+
+    notna = geoserie[notnamaske]
+    første: shapely.geometry.base.BaseGeometry = notna.iat[0]
+    return (
+        første.geom_type != "GeometryCollection"
+        and (notna.geom_type == første.geom_type).all()
+    )
 
 
 def set_gdal_auth() -> None:
@@ -233,7 +237,7 @@ def _get_geometry_types(series: gpd.GeoSeries) -> list[str]:
     if -1 in geometry_types:
         geometry_types.remove(-1)
 
-    return sorted([_geometry_type_names[idx] for idx in geometry_types])
+    return sorted([_GEOMETRY_TYPE_NAMES[idx] for idx in geometry_types])
 
 
 def read_dataframe(
@@ -241,12 +245,7 @@ def read_dataframe(
     file_format: FileFormat | None = None,
     columns: list[str] | None = None,
     bbox: Iterable[float] | BoundingBox | None = None,
-    filters: (
-        list[tuple[str, str, Any]]
-        | list[list[tuple[str, str, Any]]]
-        | pc.Expression
-        | None
-    ) = None,
+    filters: list[FilterTuple] | list[list[FilterTuple]] | pc.Expression | None = None,
     geometry_column: str | None = None,
     **kwargs: Any,
 ) -> gpd.GeoDataFrame | pd.DataFrame:
@@ -258,7 +257,7 @@ def read_dataframe(
     if file_format is None:
         if isinstance(path_or_paths, str):
             extension = path_or_paths.rpartition(".")[-1]
-            file_format = filextension2format.get(extension)
+            file_format = _FILE_EXTENSTION2FORMAT.get(extension)
 
         elif all(path.endswith(".parquet") for path in path_or_paths):
             file_format = FileFormat.PARQUET
@@ -325,7 +324,7 @@ def write_dataframe(
     """
     if file_format is None:
         extension = gcs_path.rpartition(".")[-1]
-        file_format = filextension2format.get(extension)
+        file_format = _FILE_EXTENSTION2FORMAT.get(extension)
 
     if file_format == FileFormat.PARQUET:
         filesystem = FileClient.get_gcs_file_system()
@@ -467,12 +466,7 @@ def _read_parquet(
     *,
     columns: list[str] | None = None,
     bbox: BoundingBox | Iterable[float] | None = None,
-    filters: (
-        list[tuple[str, str, Any]]
-        | list[list[tuple[str, str, Any]]]
-        | pc.Expression
-        | None
-    ) = None,
+    filters: list[FilterTuple] | list[list[FilterTuple]] | pc.Expression | None = None,
     geometry_column: str | None = None,
     schema: pyarrow.Schema | None = None,
 ) -> gpd.GeoDataFrame:
@@ -666,7 +660,7 @@ def _get_geometry_metadata(metadata: dict[bytes, bytes]) -> _GeoParquetMetadata:
             To read a table without geometry, use dapla.read_pandas() instead"""
         ) from None
 
-    return cast(_GeoParquetMetadata, json.loads(geo_metadata_bytes.decode("utf-8")))
+    return json.loads(geo_metadata_bytes.decode("utf-8"))  # type: ignore[no-any-return]
 
 
 def _validate_geometry_metadata(
