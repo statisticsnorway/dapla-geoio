@@ -6,7 +6,6 @@ import shutil
 import sys
 import warnings
 from collections.abc import Iterable
-from collections.abc import Sequence
 from typing import Any
 from typing import Literal
 from typing import NamedTuple
@@ -23,7 +22,6 @@ else:
     from typing_extensions import Self
     from typing_extensions import TypedDict
 
-import fsspec
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -42,6 +40,7 @@ from geopandas.io._geoarrow import GEOARROW_ENCODINGS
 from geopandas.io._geoarrow import construct_geometry_array
 from geopandas.io._geoarrow import construct_shapely_array
 from geopandas.io._geoarrow import construct_wkb_array
+from pyarrow import fs
 from pyarrow import parquet
 
 
@@ -259,17 +258,8 @@ def read_dataframe(
             file_format = FileFormat.PARQUET
 
     if file_format == FileFormat.PARQUET:
-        filesystem = FileClient.get_gcs_file_system()
-
-        if isinstance(path_or_paths, str):
-            path_or_paths = _remove_prefix(path_or_paths)
-
-        else:
-            path_or_paths = [_remove_prefix(file) for file in path_or_paths]
-
         return _read_parquet(
             path_or_paths,
-            filesystem=filesystem,
             columns=columns,
             bbox=bbox,
             filters=filters,
@@ -467,8 +457,7 @@ def _filter_fragments_with_bbox(
 
 
 def _read_parquet(
-    path_or_paths: str | Sequence[str],
-    filesystem: fsspec.AbstractFileSystem,
+    path_or_paths: str | Iterable[str],
     *,
     columns: Iterable[str] | None = None,
     bbox: BoundingBox | Iterable[float] | None = None,
@@ -476,11 +465,25 @@ def _read_parquet(
     geometry_column: str | None = None,
     schema: pyarrow.Schema | None = None,
 ) -> gpd.GeoDataFrame:
-    fileformat = ds.ParquetFileFormat()
+    if isinstance(path_or_paths, str):
+        path_or_paths = _remove_prefix(path_or_paths)
+
+    else:
+        path_or_paths = [_remove_prefix(file) for file in path_or_paths]
+
+    fileformat = ds.ParquetFileFormat()  # type: ignore[call-arg]
     partitioning = ds.HivePartitioning.discover(infer_dictionary=True)
+    # pyarrow.dataset.dataset skal støtte fsspec filsystemer slik som gcsfs.GCSFileSystem,
+    # ved å pakke inn fsspec filsystemer i fs.PyFileSystem(fs.FSSpecHandler(filesystem)),
+    # men dette virker ikke for partisjonerte datasett.
+    # Derfor bruker vi den Pyarrow spesifike implementasjonen.
+    # https://github.com/apache/arrow/issues/30481
+    arrow_filesystem = fs.GcsFileSystem()
+
+    try:
     dataset: ds.FileSystemDataset = ds.dataset(
         path_or_paths,
-        filesystem=filesystem,
+        filesystem=arrow_filesystem,
         format=fileformat,
         schema=schema,
         partitioning=partitioning,
