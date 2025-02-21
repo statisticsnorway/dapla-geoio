@@ -241,7 +241,12 @@ def read_dataframe(
     file_format: FileFormat | None = None,
     columns: list[str] | None = None,
     bbox: Iterable[float] | BoundingBox | None = None,
-    filters: list[tuple] | list[list[tuple]] | pc.Expression | None = None,
+    filters: (
+        list[tuple[str, str, Any]]
+        | list[list[tuple[str, str, Any]]]
+        | pc.Expression
+        | None
+    ) = None,
     geometry_column: str | None = None,
     **kwargs: Any,
 ) -> gpd.GeoDataFrame | pd.DataFrame:
@@ -434,7 +439,7 @@ def _geopandas_to_arrow(gdf: gpd.GeoDataFrame) -> pyarrow.Table:
             )
             geometry_encoding_dict[geo_column] = encoding
 
-        table = table.set_column(i, field, geom_arr)
+        table = table.set_column(i, field, geom_arr)  # type: ignore[arg-type]
 
     # Store geopandas specific file-level metadata
     # This must be done AFTER creating the table or it is not persisted
@@ -460,9 +465,14 @@ def _filter_fragments_with_bbox(
 def _read_parquet(
     path_or_paths: str | Iterable[str],
     *,
-    columns: Iterable[str] | None = None,
+    columns: list[str] | None = None,
     bbox: BoundingBox | Iterable[float] | None = None,
-    filters: list[tuple] | list[list[tuple]] | pc.Expression | None = None,
+    filters: (
+        list[tuple[str, str, Any]]
+        | list[list[tuple[str, str, Any]]]
+        | pc.Expression
+        | None
+    ) = None,
     geometry_column: str | None = None,
     schema: pyarrow.Schema | None = None,
 ) -> gpd.GeoDataFrame:
@@ -551,7 +561,7 @@ def _read_parquet(
         raise ValueError("Geometry column not in columns read from the Parquet file.")
 
     filters_expression = (
-        parquet.filters_to_expression(filters) if filters is not None else None
+        parquet.filters_to_expression(filters) if filters is not None else None  # type: ignore[arg-type]
     )
 
     if bbox is not None:
@@ -656,7 +666,7 @@ def _get_geometry_metadata(metadata: dict[bytes, bytes]) -> _GeoParquetMetadata:
             To read a table without geometry, use dapla.read_pandas() instead"""
         ) from None
 
-    return json.loads(geo_metadata_bytes.decode("utf-8"))  # type: ignore[no-any-return]
+    return cast(_GeoParquetMetadata, json.loads(geo_metadata_bytes.decode("utf-8")))
 
 
 def _validate_geometry_metadata(
@@ -691,8 +701,11 @@ def _validate_geometry_metadata(
                 del column_metadata["covering"]
 
 
-def _get_pandas_index_columns(metadata: dict[bytes, bytes]) -> list[str | dict]:
-    return json.loads(s=metadata[b"pandas"].decode("utf8"))["index_columns"]
+def _get_pandas_index_columns(metadata: dict[bytes, bytes]) -> list[str | dict]:  # type: ignore[type-arg]
+    return cast(
+        list[str | dict],  # type: ignore[type-arg]
+        json.loads(s=metadata[b"pandas"].decode("utf8"))["index_columns"],
+    )
 
 
 def _create_metadata(
