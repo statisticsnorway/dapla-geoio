@@ -670,9 +670,14 @@ def _validate_geometry_metadata(
         if col not in schema.names:
             raise ValueError("Geometry column in metadata don't exist in dataset")
 
-        if column_metadata[
-            "encoding"
-        ] in GEOARROW_ENCODINGS and not pyarrow.types.is_struct(schema.field(col).type):
+        column_field = schema.field(col)
+        nested_type = column_field.type
+        while pyarrow.types.is_list(nested_type):
+            nested_type = nested_type.value_type
+
+        if (
+            column_metadata["encoding"] in GEOARROW_ENCODINGS
+        ) and not pyarrow.types.is_struct(nested_type):
             warnings.warn(
                 (
                     "Geoparquet files should not use the Geoarrow interleaved encoding.\n"
