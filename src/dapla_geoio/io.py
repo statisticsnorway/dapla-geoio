@@ -508,16 +508,14 @@ def _read_parquet(
         fragment_paths = cast(
             list[str], filesystem.glob(f"{path_or_paths}/**/*.parquet", recursive=True)
         )
-        parquet_file = parquet.ParquetFile(
-            fragment_paths[0], filesystem=arrow_filesystem
-        )
-
-        schema = parquet_file.schema_arrow
+        parquet_file = fileformat.make_fragment(fragment_paths[0], filesystem=arrow_filesystem)
+        schema = parquet_file.physical_schema
+        partitioning = ds.HivePartitioning.discover(infer_dictionary=True, schema=schema)
 
         warnings.warn(
             "Pyarrow was unable to merge schema for partioned dataset,\n"
-            "forced schema to be like first fragment found."
-            "Orignal error:\n"
+            "forced schema to be like first fragment found. "
+            "Original error:\n"
             f"{e}",
             stacklevel=4,
         )
