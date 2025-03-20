@@ -20,6 +20,7 @@ geopandas = "^1.0.1"
 pyogrio = "^0.10.0"
 dapla-toolbelt = "^3.2.2"
 strenum = "^0.4.15"
+universal-pathlib = "^0.2.6"
 
 [tool.poetry.group.dev.dependencies]
 pygments = ">=2.10.0"

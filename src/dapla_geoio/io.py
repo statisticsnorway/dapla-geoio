@@ -6,11 +6,13 @@ import shutil
 import sys
 import warnings
 from collections.abc import Iterable
+from collections.abc import Iterator
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Literal
 from typing import NamedTuple
 from typing import cast
+from typing import overload
 
 import geopandas as gpd
 import numpy as np
@@ -18,21 +20,20 @@ import pandas as pd
 import pyarrow
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
+import pyarrow.fs
 import pyogrio
 import pyogrio._err
 import pyogrio.errors
 import shapely
 from dapla import AuthClient
-from dapla import FileClient
-from fsspec.implementations.arrow import ArrowFSWrapper
 from geopandas.array import from_shapely
 from geopandas.array import from_wkb
 from geopandas.io._geoarrow import GEOARROW_ENCODINGS
 from geopandas.io._geoarrow import construct_geometry_array
 from geopandas.io._geoarrow import construct_shapely_array
 from geopandas.io._geoarrow import construct_wkb_array
-from pyarrow import fs
 from pyarrow import parquet
+from upath.implementations.cloud import GCSPath
 
 if sys.version_info >= (3, 11):
     from enum import StrEnum
@@ -47,7 +48,7 @@ else:
 
 if TYPE_CHECKING:
     from pyarrow._stubs_typing import FilterTuple
-
+    
 
 class _GeoParquetColumnMetadata(TypedDict, total=False):
     encoding: Required[str]
@@ -163,15 +164,14 @@ class FileFormat(StrEnum):
 
 
 _FILE_EXTENSTION2FORMAT = {
-    "parquet": FileFormat.PARQUET,
-    "gpkg": FileFormat.GEOPACKAGE,
-    "fgb": FileFormat.FLATGEOBUFFER,
-    "json": FileFormat.GEOJSON,
-    "geojson": FileFormat.GEOJSON,
-    "shp": FileFormat.SHAPEFILE,
-    "gdb": FileFormat.FILEGDB,
+    ".parquet": FileFormat.PARQUET,
+    ".gpkg": FileFormat.GEOPACKAGE,
+    ".fgb": FileFormat.FLATGEOBUFFER,
+    ".json": FileFormat.GEOJSON,
+    ".geojson": FileFormat.GEOJSON,
+    ".shp": FileFormat.SHAPEFILE,
+    ".gdb": FileFormat.FILEGDB,
 }
-
 
 def homogen_geometri(geoserie: gpd.GeoSeries) -> bool | np.bool_:
     """Sjekker at alle elementer i serien har lik geometritype og ikke er av typen GeometryCollection."""
@@ -200,30 +200,46 @@ def set_gdal_auth() -> None:
     pyogrio.set_gdal_config_options(options)
 
 
-def _ensure_gs_vsi_prefix(gcs_path: str) -> str:
+@overload
+def _ensure_gs_path(path_or_paths: str) -> GCSPath: ...
+
+
+@overload
+def _ensure_gs_path(path_or_paths: GCSPath) -> GCSPath: ...
+
+
+@overload
+def _ensure_gs_path(path_or_paths: Iterable[str]) -> list[GCSPath]: ...
+
+
+@overload
+def _ensure_gs_path(path_or_paths: Iterable[GCSPath]) -> list[GCSPath]: ...
+
+
+def _ensure_gs_path(
+    path_or_paths: str | GCSPath | Iterable[str] | Iterable[GCSPath],
+) -> GCSPath | list[GCSPath]:
+    if isinstance(path_or_paths, GCSPath):
+        return path_or_paths
+
+    elif isinstance(path_or_paths, str):
+        return cast(GCSPath, GCSPath(path_or_paths, protocol="gs"))
+
+    elif any(isinstance(path, GCSPath) for path in path_or_paths):
+        return cast(list[GCSPath], list(path_or_paths))
+
+    else:
+        return [cast(GCSPath, GCSPath(path, protocol="gs")) for path in path_or_paths]
+
+
+def _ensure_gs_vsi_prefix(gcs_path: GCSPath) -> str:
     """Legger til prefixet "/vsigs/" til filbanen.
 
-    GDAL har sitt eget virtuelle filsystem abstraksjons-skjema ulikt fsspec,
+    GDAL har sitt eget virtuelle fil-abstraksjons-system ulikt fsspec,
     som bruker prefixet /vsigs/ istedenfor gs://.
     https://gdal.org/user/virtual_file_systems.html
     """
-    if "/vsigs/" in gcs_path:
-        return gcs_path
-
-    if gcs_path.startswith(prefix := "gs://"):
-        return f"/vsigs/{gcs_path[len(prefix) :]}"
-
-    return f"/vsigs/{gcs_path}"
-
-
-def _remove_prefix(gcs_path: str) -> str:
-    """Fjerner både prefikset /vsigs/ og gs:// fra filsti."""
-    for prefix in ["gs://", "/vsigs/"]:
-        if gcs_path.startswith(prefix):
-            return gcs_path[len(prefix) :]
-
-    else:
-        return gcs_path
+    return f"/vsigs/{gcs_path.path.removeprefix(f'{gcs_path.protocol}://')}"
 
 
 def _get_geometry_types(series: gpd.GeoSeries) -> list[str]:
@@ -241,7 +257,7 @@ def _get_geometry_types(series: gpd.GeoSeries) -> list[str]:
 
 
 def read_dataframe(
-    path_or_paths: str | Iterable[str],
+    path_or_paths: str | GCSPath | Iterable[str] | Iterable[GCSPath],
     file_format: FileFormat | None = None,
     columns: list[str] | None = None,
     bbox: Iterable[float] | BoundingBox | None = None,
@@ -254,17 +270,19 @@ def read_dataframe(
     Støtter geoparquetfiler med WKB kodet geometri og partisjonerte geoparquetfiler.
     Bruker pyogrio til å lese andre filformater.
     """
+    gcs_path_or_paths = _ensure_gs_path(path_or_paths)
+
     if file_format is None:
-        if isinstance(path_or_paths, str):
-            extension = path_or_paths.rpartition(".")[-1]
+        if isinstance(gcs_path_or_paths, GCSPath):
+            extension = gcs_path_or_paths.suffix
             file_format = _FILE_EXTENSTION2FORMAT.get(extension)
 
-        elif all(path.endswith(".parquet") for path in path_or_paths):
+        elif all(path.suffix == "parquet" for path in gcs_path_or_paths):
             file_format = FileFormat.PARQUET
 
     if file_format == FileFormat.PARQUET:
         return _read_parquet(
-            path_or_paths,
+            gcs_path_or_paths,
             columns=columns,
             bbox=bbox,
             filters=filters,
@@ -273,18 +291,18 @@ def read_dataframe(
         )
 
     else:
-        if not isinstance(path_or_paths, str):
+        if not isinstance(gcs_path_or_paths, GCSPath):
             raise ValueError("Multiple paths are only supported for parquet format")
 
         set_gdal_auth()
-        vsi_path = _ensure_gs_vsi_prefix(path_or_paths)
+        vsi_path = _ensure_gs_vsi_prefix(gcs_path_or_paths)
 
         try:
             return pyogrio.read_dataframe(
                 vsi_path,
                 bbox=bbox,
                 columns=columns,
-                driver=(str(file_format) if file_format else None),
+                driver=(file_format.value if file_format else None),
                 use_arrow=True,
                 **kwargs,
             )
@@ -298,14 +316,12 @@ def read_dataframe(
             if file_format in {FileFormat.SHAPEFILE, FileFormat.FILEGDB}:
                 raise e
 
-            path_or_paths = _remove_prefix(path_or_paths)
-            filesystem = FileClient.get_gcs_file_system()
-            with filesystem.open(path_or_paths, "rb") as buffer:
+            with gcs_path_or_paths.open("rb") as buffer:
                 return pyogrio.read_dataframe(
                     buffer,
                     bbox=bbox,
                     columns=columns,
-                    driver=(str(file_format) if file_format else None),
+                    driver=(file_format.value if file_format else None),
                     use_arrow=True,
                     **kwargs,
                 )
@@ -313,7 +329,7 @@ def read_dataframe(
 
 def write_dataframe(
     gdf: gpd.GeoDataFrame,
-    gcs_path: str,
+    path: str | GCSPath,
     file_format: FileFormat | None = None,
     **kwargs: Any,
 ) -> None:
@@ -322,17 +338,18 @@ def write_dataframe(
     Støtter  å skrive til geoparquetfiler med WKB kodet geometri, og
     bruker pyogrio til å lese andre filformater.
     """
+    gsc_path = _ensure_gs_path(path)
+
     if file_format is None:
-        extension = gcs_path.rpartition(".")[-1]
+        extension = gsc_path.suffix
         file_format = _FILE_EXTENSTION2FORMAT.get(extension)
 
     if file_format == FileFormat.PARQUET:
-        filesystem = FileClient.get_gcs_file_system()
-        gcs_path = _remove_prefix(gcs_path)
+        filesystem = pyarrow.fs.GcsFileSystem()
         table = _geopandas_to_arrow(gdf)
         parquet.write_table(
             table,
-            where=gcs_path,
+            where=gsc_path.path,
             filesystem=filesystem,
             compression="snappy",
             coerce_timestamps="ms",
@@ -343,23 +360,20 @@ def write_dataframe(
         if (gdf.dtypes == "geometry").sum() != 1:
             raise ValueError("The Geojson-format supports only on geometry column.")
 
-        gcs_path = _remove_prefix(gcs_path)
-
         feature_collection = gdf.to_json(ensure_ascii=False)
 
-        filesystem = FileClient.get_gcs_file_system()
-        with filesystem.open(gcs_path, "w", encoding="utf-8") as file:
+        with gsc_path.open("w", encoding="utf-8") as file:
             file.write(feature_collection)
 
     else:
         set_gdal_auth()
-        path = _ensure_gs_vsi_prefix(gcs_path)
+        vsi_path = _ensure_gs_vsi_prefix(gsc_path)
 
         try:
             pyogrio.write_dataframe(
                 gdf,
-                path,
-                driver=(str(file_format) if file_format else None),
+                vsi_path,
+                driver=(file_format.value if file_format else None),
                 use_arrow=True,
                 **kwargs,
             )
@@ -374,29 +388,26 @@ def write_dataframe(
             if file_format in {FileFormat.SHAPEFILE, FileFormat.FILEGDB, None}:
                 raise e
 
-            gcs_path = _remove_prefix(gcs_path)
-
             with io.BytesIO() as buffer:
                 pyogrio.write_dataframe(
                     gdf,
                     buffer,
-                    driver=str(file_format),
+                    driver=(file_format.value if file_format else None),
                     use_arrow=True,
                     **kwargs,
                 )
 
-                filesystem = FileClient.get_gcs_file_system()
-                with filesystem.open(gcs_path, "wb") as file:
+                with gsc_path.open("wb") as file:
                     shutil.copyfileobj(buffer, file)
 
 
-def get_parquet_files_in_folder(folder: str) -> list[str]:
+def get_parquet_files_in_folder(folder: str | GCSPath) -> list[GCSPath]:
     """Lister opp parquetfiler i en "mappe" i en Google cloud bøtte.
 
-    Nyttig hvis man har en partisjonert geoparquet fil.
+    Nyttig hvis man har flere geoparquet filer, men som ikke har «hive» partisjonering.
     """
-    file_paths = FileClient.ls(folder)
-    return list(filter(lambda p: p.endswith(".parquet"), file_paths))
+    file_paths = cast(Iterator[GCSPath], GCSPath(folder, protocol="gs").glob("**/*"))
+    return list(filter(lambda p: p.suffix == ".parquet", file_paths))
 
 
 def _geopandas_to_arrow(gdf: gpd.GeoDataFrame) -> pyarrow.Table:
@@ -462,7 +473,7 @@ def _filter_fragments_with_bbox(
 
 
 def _read_parquet(
-    path_or_paths: str | Iterable[str],
+    path_or_paths: GCSPath | Iterable[GCSPath],
     *,
     columns: list[str] | None = None,
     bbox: BoundingBox | Iterable[float] | None = None,
@@ -470,64 +481,22 @@ def _read_parquet(
     geometry_column: str | None = None,
     schema: pyarrow.Schema | None = None,
 ) -> gpd.GeoDataFrame:
-    if isinstance(path_or_paths, str):
-        path_or_paths = _remove_prefix(path_or_paths)
-
-    else:
-        path_or_paths = [_remove_prefix(file) for file in path_or_paths]
-
-    fileformat = ds.ParquetFileFormat()  # type: ignore[call-arg]
+    fileformat = ds.ParquetFileFormat()
+    filesystem = pyarrow.fs.GcsFileSystem()
     partitioning = ds.HivePartitioning.discover(infer_dictionary=True)
-    # pyarrow.dataset.dataset skal støtte fsspec filsystemer slik som gcsfs.GCSFileSystem,
-    # ved å pakke inn fsspec filsystemer i fs.PyFileSystem(fs.FSSpecHandler(filesystem)),
-    # men dette virker ikke for partisjonerte datasett.
-    # Derfor bruker vi den Pyarrow spesifike implementasjonen.
-    # https://github.com/apache/arrow/issues/30481
-    arrow_filesystem = fs.GcsFileSystem()
 
-    try:
-        dataset: ds.FileSystemDataset = ds.dataset(
-            path_or_paths,
-            filesystem=arrow_filesystem,
-            format=fileformat,
-            schema=schema,
-            partitioning=partitioning,
-        )
+    if isinstance(path_or_paths, GCSPath):
+        str_path_or_paths = path_or_paths.path
+    else:
+        str_path_or_paths = [path.path for path in path_or_paths]
 
-    except pyarrow.ArrowTypeError as e:
-        # Pyarrow er streng på at skjemaet i et partisjonert datasett skal være likt for alle filer,
-        # når man ikke spesifiserer et.
-        # I enkle tilfeller forsøker vi hente skjema fra den første filen vi finner, og bruker det.
-        if schema is not None or not isinstance(path_or_paths, str):
-            raise e
-        filesystem = ArrowFSWrapper(arrow_filesystem)
-
-        if not filesystem.isdir(path_or_paths):
-            raise e
-
-        fragment_paths = cast(
-            list[str], filesystem.glob(f"{path_or_paths}/**/*.parquet", recursive=True)
-        )
-        parquet_file = fileformat.make_fragment(fragment_paths[0], filesystem=arrow_filesystem)
-        schema = parquet_file.physical_schema
-        partitioning = ds.HivePartitioning.discover(infer_dictionary=True, schema=schema)
-
-        warnings.warn(
-            "Pyarrow was unable to merge schema for partioned dataset,\n"
-            "forced schema to be like first fragment found. "
-            "Original error:\n"
-            f"{e}",
-            stacklevel=4,
-        )
-
-        dataset = ds.dataset(
-            path_or_paths,
-            filesystem=arrow_filesystem,
-            format=fileformat,
-            schema=schema,
-            partitioning=partitioning,
-        )
-
+    dataset: ds.FileSystemDataset = ds.dataset(
+        str_path_or_paths,
+        schema=schema,
+        format=fileformat,
+        filesystem=filesystem,
+        partitioning=partitioning,
+    )
     schema = dataset.schema
     metadata = schema.metadata if schema.metadata else {}
 
