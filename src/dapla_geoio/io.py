@@ -25,7 +25,6 @@ import pyogrio
 import pyogrio._err
 import pyogrio.errors
 import shapely
-from dapla import AuthClient
 from geopandas.array import from_shapely
 from geopandas.array import from_wkb
 from geopandas.io._geoarrow import GEOARROW_ENCODINGS
@@ -191,11 +190,9 @@ def homogen_geometri(geoserie: gpd.GeoSeries) -> bool | np.bool_:
 
 def set_gdal_auth() -> None:
     """Setter miljøvariabler for GDAL."""
-    options: dict[str, str | bool] = {"CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE": True}
-
-    credentials = AuthClient.fetch_google_credentials()
-    if credentials.token:
-        options["GDAL_HTTP_HEADERS"] = f"Authorization: Bearer {credentials.token}"
+    options: dict[str, str | bool] = {
+        "CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE": True,
+        }
 
     pyogrio.set_gdal_config_options(options)
 
