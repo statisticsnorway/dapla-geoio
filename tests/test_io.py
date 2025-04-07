@@ -1,7 +1,6 @@
 import os
 import shutil
 import subprocess
-import time
 from collections.abc import Iterator
 from functools import partial
 from pathlib import Path
@@ -15,6 +14,8 @@ import pytest
 import requests
 from pandas.testing import assert_frame_equal
 from pytest import MonkeyPatch
+from requests.adapters import HTTPAdapter
+from requests.adapters import Retry
 from shapely import Point
 from upath.implementations.cloud import GCSPath
 
@@ -77,17 +78,17 @@ def docker_gcs() -> (
     )
     stop_docker(container)
     subprocess.run(cmd)
-    retries = 15
-    for attempt in range(1, retries + 1):
-        try:
-            r = requests.get(url + "/storage/v1/b", timeout=10)
-            if r.ok:
-                yield url
-                break
-        except Exception as e:
-            if attempt == retries:
-                raise SystemError from e
-            time.sleep(1)
+    with requests.Session() as session:
+        retries = Retry(
+            total=15, backoff_factor=2, status_forcelist=[500, 502, 503, 504]
+        )
+
+        session.mount("http://", HTTPAdapter(max_retries=retries))
+
+        response = session.get(url + "/storage/v1/b", timeout=10)
+        response.raise_for_status()
+
+    yield url
     stop_docker(container)
 
 
