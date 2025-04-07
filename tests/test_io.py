@@ -26,7 +26,7 @@ punktserie = gpd.GeoSeries([Point((1, 2)), Point((2, 3)), Point((3, 4))])
 punkdataframe = gpd.GeoDataFrame({"poi": ("a", "b", "c")}, geometry=punktserie)
 
 
-def stop_docker(container):
+def stop_docker(container: str) -> None:
     cid = (
         subprocess.check_output(
             ("docker", "ps", "-a", "-q", "--filter", f"name={container}")
@@ -47,6 +47,8 @@ def local_testdir() -> Path:
 def docker_gcs() -> (
     Iterator[Literal["https://storage.googleapis.com", "http://localhost:4443"]]
 ):
+    url: Literal["https://storage.googleapis.com", "http://localhost:4443"]
+
     if os.environ.get("DAPLA_REGION") == "DAPLA_LAB":
         yield "https://storage.googleapis.com"
         return
@@ -90,11 +92,11 @@ def docker_gcs() -> (
 
 
 @pytest.fixture(scope="session")
-def gcs_fixture(docker_gcs, local_testdir: Path) -> Iterator[GCSPath]:
+def gcs_fixture(docker_gcs: str, local_testdir: Path) -> Iterator[GCSPath]:
     bucket_path: GCSPath
     if os.environ.get("DAPLA_REGION") == "DAPLA_LAB":
         bucket_name = "ssb-dapla-felles-data-produkt-test"
-        bucket_path = cast(
+        bucket_path = cast(  # type: ignore [redundant-cast]
             GCSPath,
             GCSPath(
                 bucket_name,
@@ -106,7 +108,7 @@ def gcs_fixture(docker_gcs, local_testdir: Path) -> Iterator[GCSPath]:
 
     else:
         bucket_name = "test_bucket"
-        bucket_path = cast(
+        bucket_path = cast(  # type: ignore [redundant-cast]
             GCSPath,
             GCSPath(bucket_name, protocol="gs", endpoint_url=docker_gcs, token="anon"),
         )
@@ -114,7 +116,7 @@ def gcs_fixture(docker_gcs, local_testdir: Path) -> Iterator[GCSPath]:
     fs = bucket_path.fs
 
     if bucket_path.exists():
-        for key in bucket_path.iterdir():
+        for key in bucket_path.iterdir():  # type: ignore [no-untyped-call]
             if key.is_file():
                 key.unlink()
     else:
@@ -132,7 +134,7 @@ def gcs_fixture(docker_gcs, local_testdir: Path) -> Iterator[GCSPath]:
 
 
 @pytest.fixture
-def gdal_patch(docker_gcs) -> Iterator[None]:
+def gdal_patch(docker_gcs: str) -> Iterator[None]:
     if docker_gcs != "https://storage.googleapis.com":
         # fsouza/fake-gcs-server støtter ikke GCS XML-apiet, som Gdal er avhengig av.
         # Se https://github.com/fsouza/fake-gcs-server/issues/331
@@ -153,7 +155,7 @@ def gdal_patch(docker_gcs) -> Iterator[None]:
 
 
 @pytest.fixture
-def pyarrrow_patch(monkeypatch: MonkeyPatch, docker_gcs) -> Iterator[None]:
+def pyarrrow_patch(monkeypatch: MonkeyPatch, docker_gcs: str) -> Iterator[None]:
     if docker_gcs != "https://storage.googleapis.com":
         test_gcs_file_system = partial(
             pyarrow.fs.GcsFileSystem,
@@ -161,7 +163,7 @@ def pyarrrow_patch(monkeypatch: MonkeyPatch, docker_gcs) -> Iterator[None]:
             endpoint_override=docker_gcs.removeprefix("http://"),
         )
         monkeypatch.setattr(
-            dapla_geoio.io.pyarrow.fs, "GcsFileSystem", value=test_gcs_file_system
+            dapla_geoio.io.pyarrow.fs, "GcsFileSystem", value=test_gcs_file_system  # type: ignore [attr-defined]
         )
     yield
 

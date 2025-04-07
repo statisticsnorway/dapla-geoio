@@ -76,12 +76,14 @@ warn_unreachable = true
 pretty = true
 show_column_numbers = true
 show_error_context = true
+disable_error_code  = ["overload-overlap"]
 
 [[tool.mypy.overrides]]
 module = [
     "geopandas.*",
     "pyogrio.*",
-    "fsspec.*"
+    "fsspec.*",
+    "requests.*",
 ]
 ignore_missing_imports = true
 

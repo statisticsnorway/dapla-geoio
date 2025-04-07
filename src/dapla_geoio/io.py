@@ -221,13 +221,13 @@ def _ensure_gs_path(
         return path_or_paths
 
     elif isinstance(path_or_paths, str):
-        return cast(GCSPath, GCSPath(path_or_paths, protocol="gs"))
+        return cast(GCSPath, GCSPath(path_or_paths, protocol="gs"))  # type: ignore [redundant-cast]
 
     elif any(isinstance(path, GCSPath) for path in path_or_paths):
         return cast(list[GCSPath], list(path_or_paths))
 
     else:
-        return [cast(GCSPath, GCSPath(path, protocol="gs")) for path in path_or_paths]
+        return [cast(GCSPath, GCSPath(path, protocol="gs")) for path in path_or_paths]  # type: ignore [redundant-cast]
 
 
 def _ensure_gs_vsi_prefix(gcs_path: GCSPath) -> str:
@@ -479,9 +479,11 @@ def _read_parquet(
     geometry_column: str | None = None,
     schema: pyarrow.Schema | None = None,
 ) -> gpd.GeoDataFrame:
-    fileformat = ds.ParquetFileFormat()
+    fileformat = ds.ParquetFileFormat()  # type: ignore  [call-arg]
     filesystem = pyarrow.fs.GcsFileSystem()
     partitioning = ds.HivePartitioning.discover(infer_dictionary=True)
+
+    str_path_or_paths: str | list[str]
 
     if isinstance(path_or_paths, GCSPath):
         str_path_or_paths = path_or_paths.path
