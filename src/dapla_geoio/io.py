@@ -47,7 +47,7 @@ else:
 
 if TYPE_CHECKING:
     from pyarrow._stubs_typing import FilterTuple
-    
+
 
 class _GeoParquetColumnMetadata(TypedDict, total=False):
     encoding: Required[str]
@@ -172,6 +172,7 @@ _FILE_EXTENSTION2FORMAT = {
     ".gdb": FileFormat.FILEGDB,
 }
 
+
 def homogen_geometri(geoserie: gpd.GeoSeries) -> bool | np.bool_:
     """Sjekker at alle elementer i serien har lik geometritype og ikke er av typen GeometryCollection."""
     notnamaske = geoserie.notna()
@@ -192,7 +193,7 @@ def set_gdal_auth() -> None:
     """Setter miljøvariabler for GDAL."""
     options: dict[str, str | bool] = {
         "CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE": True,
-        }
+    }
 
     pyogrio.set_gdal_config_options(options)
 

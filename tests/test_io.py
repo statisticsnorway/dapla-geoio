@@ -27,7 +27,13 @@ punkdataframe = gpd.GeoDataFrame({"poi": ("a", "b", "c")}, geometry=punktserie)
 
 
 def stop_docker(container):
-    cid = subprocess.check_output(("docker", "ps", "-a", "-q", "--filter", f"name={container}")).strip().decode()
+    cid = (
+        subprocess.check_output(
+            ("docker", "ps", "-a", "-q", "--filter", f"name={container}")
+        )
+        .strip()
+        .decode()
+    )
     if cid:
         subprocess.run(("docker", "rm", "-f", "-v", cid))
 
@@ -44,9 +50,8 @@ def docker_gcs() -> (
     if os.environ.get("DAPLA_REGION") == "DAPLA_LAB":
         yield "https://storage.googleapis.com"
         return
-    
-    url = "http://localhost:4443"
 
+    url = "http://localhost:4443"
 
     if shutil.which("docker") is None:
         pytest.skip("docker not installed")
@@ -56,13 +61,14 @@ def docker_gcs() -> (
         "docker",
         "run",
         "-d",
-        "-p", "4443:4443",
+        "-p",
+        "4443:4443",
         "--name",
         container,
         "fsouza/fake-gcs-server:latest",
         "--scheme",
         "http",
-        "--external-url", 
+        "--external-url",
         url,
         "--public-host",
         url,
@@ -116,7 +122,7 @@ def gcs_fixture(docker_gcs, local_testdir: Path) -> Iterator[GCSPath]:
 
     for source_path in local_testdir.iterdir():
         target_path = bucket_path / source_path.relative_to(local_testdir)
-        
+
         if source_path.is_file():
             fs.upload(str(source_path), str(target_path))
 
@@ -159,8 +165,9 @@ def pyarrrow_patch(monkeypatch: MonkeyPatch, docker_gcs) -> Iterator[None]:
         )
     yield
 
+
 @pytest.fixture
-def parquetfile_path(gcs_fixture: GCSPath, pyarrrow_patch: None):
+def parquetfile_path(gcs_fixture: GCSPath, pyarrrow_patch: None) -> Iterator[GCSPath]:
     path = gcs_fixture / "temp" / "pointsw.parquet"
     yield path
     path.unlink()
@@ -190,16 +197,14 @@ def shpfile_path(gcs_fixture: GCSPath, gdal_patch: None) -> Iterator[GCSPath]:
 
 
 def test_read_parquet(gcs_fixture: GCSPath, pyarrrow_patch: None) -> None:
-    parquetfile_path = gcs_fixture /  "points.parquet"
+    parquetfile_path = gcs_fixture / "points.parquet"
     lestdataframe = read_dataframe(parquetfile_path)
     assert_frame_equal(punkdataframe, lestdataframe)
 
 
 def test_read_parquet_bbox(gcs_fixture: GCSPath, pyarrrow_patch: None) -> None:
-    parquetfile_path = gcs_fixture /  "points.parquet"
-    lestdataframe = read_dataframe(
-        parquetfile_path, bbox=[0.5, 1.5, 2.5, 3.5]
-    )
+    parquetfile_path = gcs_fixture / "points.parquet"
+    lestdataframe = read_dataframe(parquetfile_path, bbox=[0.5, 1.5, 2.5, 3.5])
     assert_frame_equal(punkdataframe.iloc[:2], lestdataframe)
 
 
