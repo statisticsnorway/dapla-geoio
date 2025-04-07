@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "ssb-dapla-geoio"
 packages = [{include = "dapla_geoio", from = "src"}]
-version = "0.0.7"
+version = "0.1.0"
 description = "Dapla GeoIO"
 authors = ["Bjørn Lie Rapp <bjorn.rapp@ssb.no>"]
 license = "MIT"
