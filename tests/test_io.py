@@ -5,6 +5,8 @@ import time
 from collections.abc import Iterator
 from functools import partial
 from pathlib import Path
+from typing import Literal
+from typing import cast
 
 import geopandas as gpd
 import pyarrow.fs
@@ -31,12 +33,14 @@ def stop_docker(container):
 
 
 @pytest.fixture(scope="session")
-def local_testdir():
+def local_testdir() -> Path:
     return Path("tests", "data").absolute()
 
 
 @pytest.fixture(scope="session")
-def docker_gcs():
+def docker_gcs() -> (
+    Iterator[Literal["https://storage.googleapis.com", "http://localhost:4443"]]
+):
     if os.environ.get("DAPLA_REGION") == "DAPLA_LAB":
         yield "https://storage.googleapis.com"
         return
@@ -80,21 +84,25 @@ def docker_gcs():
 
 
 @pytest.fixture(scope="session")
-def gcs_fixture(docker_gcs, local_testdir: Path):
+def gcs_fixture(docker_gcs, local_testdir: Path) -> Iterator[GCSPath]:
+    bucket_path: GCSPath
     if os.environ.get("DAPLA_REGION") == "DAPLA_LAB":
         bucket_name = "ssb-dapla-felles-data-produkt-test"
-        bucket_path = GCSPath(
-            bucket_name,
-            "dapla_geo_io_tests",
-            protocol="gs",
-            endpoint_url=docker_gcs,
-            token="anon",
+        bucket_path = cast(
+            GCSPath,
+            GCSPath(
+                bucket_name,
+                "dapla_geo_io_tests",
+                protocol="gs",
+                endpoint_url=docker_gcs,
+            ),
         )
 
     else:
         bucket_name = "test_bucket"
-        bucket_path = GCSPath(
-            bucket_name, protocol="gs", endpoint_url=docker_gcs, token="anon"
+        bucket_path = cast(
+            GCSPath,
+            GCSPath(bucket_name, protocol="gs", endpoint_url=docker_gcs, token="anon"),
         )
 
     fs = bucket_path.fs
@@ -125,23 +133,30 @@ def gdal_patch(docker_gcs) -> Iterator[None]:
         # Et Docker image med nødvendige endringer finnes på tustvold/fake-gcs-server,
         # men denne inneholder nye bugs for Json-apiet.
         pytest.skip("Kan kun teste mot ekte GCS-tjeneste")
- 
-    pyogrio.set_gdal_config_options({
-        "CPL_GS_ENDPOINT": docker_gcs + "/",
-        "GS_NO_SIGN_REQUEST": True,
-        "CPL_CURL_VERBOSE": True,
-    })
+    else:
+        anonym_innloging = False
+
+    pyogrio.set_gdal_config_options(
+        {
+            "CPL_GS_ENDPOINT": docker_gcs + "/",
+            "GS_NO_SIGN_REQUEST": anonym_innloging,
+            "CPL_CURL_VERBOSE": True,
+        }
+    )
     yield
 
 
 @pytest.fixture
 def pyarrrow_patch(monkeypatch: MonkeyPatch, docker_gcs) -> Iterator[None]:
-    test_gcs_file_system = partial(
-        pyarrow.fs.GcsFileSystem,
-        anonymous=True,
-        endpoint_override=docker_gcs.removeprefix("https://").removeprefix("http://"),
-    )
-    monkeypatch.setattr(dapla_geoio.io.pyarrow.fs, "GcsFileSystem", value=test_gcs_file_system)
+    if docker_gcs != "https://storage.googleapis.com":
+        test_gcs_file_system = partial(
+            pyarrow.fs.GcsFileSystem,
+            anonymous=True,
+            endpoint_override=docker_gcs.removeprefix("http://"),
+        )
+        monkeypatch.setattr(
+            dapla_geoio.io.pyarrow.fs, "GcsFileSystem", value=test_gcs_file_system
+        )
     yield
 
 @pytest.fixture
@@ -152,21 +167,21 @@ def parquetfile_path(gcs_fixture: GCSPath, pyarrrow_patch: None):
 
 
 @pytest.fixture
-def jsonfile_path(gcs_fixture: GCSPath):
+def jsonfile_path(gcs_fixture: GCSPath) -> Iterator[GCSPath]:
     path = gcs_fixture / "temp" / "pointsw.json"
     yield path
     path.unlink()
 
 
 @pytest.fixture
-def gpkgfile_path(gdal_patch: None, gcs_fixture: GCSPath):
+def gpkgfile_path(gcs_fixture: GCSPath, gdal_patch: None) -> Iterator[GCSPath]:
     path = gcs_fixture / "temp" / "pointsw.gpkg"
     yield path
     path.unlink()
 
 
 @pytest.fixture
-def shpfile_path(gdal_patch: None, gcs_fixture: GCSPath) :
+def shpfile_path(gcs_fixture: GCSPath, gdal_patch: None) -> Iterator[GCSPath]:
     path = gcs_fixture / "temp" / "pointsw.shp"
     yield path
     path.unlink()
