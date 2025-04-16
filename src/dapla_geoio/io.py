@@ -490,13 +490,51 @@ def _read_parquet(
     else:
         str_path_or_paths = [path.path for path in path_or_paths]
 
-    dataset: ds.FileSystemDataset = ds.dataset(
-        str_path_or_paths,
-        schema=schema,
-        format=fileformat,
-        filesystem=filesystem,
-        partitioning=partitioning,
-    )
+    try:
+        dataset: ds.FileSystemDataset = ds.dataset(
+            str_path_or_paths,
+            schema=schema,
+            format=fileformat,
+            filesystem=filesystem,
+            partitioning=partitioning,
+        )
+
+    except pyarrow.ArrowTypeError as e:
+        # Pyarrow er streng på at skjemaet i et partisjonert datasett skal være likt for alle filer,
+        # når man ikke spesifiserer et.
+        # I enkle tilfeller forsøker vi hente skjema fra den første filen vi finner, og bruker det.
+        if schema is not None or not isinstance(path_or_paths, GCSPath):
+            raise e
+
+        fragment_paths = list(path_or_paths.glob("/**/*.parquet"))
+
+        if len(fragment_paths) <= 2:
+            raise e
+
+        parquet_file = fileformat.make_fragment(
+            fragment_paths[0].path, filesystem=filesystem
+        )
+        schema = parquet_file.physical_schema
+        partitioning = ds.HivePartitioning.discover(
+            infer_dictionary=True, schema=schema
+        )
+
+        warnings.warn(
+            "Pyarrow was unable to merge schema for partioned dataset,\n"
+            "forced schema to be like first fragment found. "
+            "Original error:\n"
+            f"{e}",
+            stacklevel=4,
+        )
+
+        dataset = ds.dataset(
+            str_path_or_paths,
+            filesystem=filesystem,
+            format=fileformat,
+            schema=schema,
+            partitioning=partitioning,
+        )
+
     schema = dataset.schema
     metadata = schema.metadata if schema.metadata else {}
 
