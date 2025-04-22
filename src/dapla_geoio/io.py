@@ -506,9 +506,9 @@ def _read_parquet(
         if schema is not None or not isinstance(path_or_paths, GCSPath):
             raise e
 
-        fragment_paths = list(path_or_paths.glob("/**/*.parquet"))
+        fragment_paths = list(path_or_paths.glob("**/*.parquet"))
 
-        if len(fragment_paths) <= 2:
+        if len(fragment_paths) < 2:
             raise e
 
         parquet_file = fileformat.make_fragment(
