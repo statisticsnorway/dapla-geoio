@@ -4,22 +4,17 @@ import io
 import json
 import shutil
 import sys
-import warnings
 from collections.abc import Iterable
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Literal
-from typing import NamedTuple
 from typing import cast
-from typing import overload
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pyarrow
 import pyarrow.compute as pc
-import pyarrow.dataset as ds
 import pyarrow.fs
 import pyogrio
 import pyogrio._err
@@ -27,115 +22,24 @@ import pyogrio.errors
 import shapely
 from geopandas.array import from_shapely
 from geopandas.array import from_wkb
-from geopandas.io._geoarrow import GEOARROW_ENCODINGS
 from geopandas.io._geoarrow import construct_geometry_array
 from geopandas.io._geoarrow import construct_shapely_array
 from geopandas.io._geoarrow import construct_wkb_array
 from pyarrow import parquet
 from upath.implementations.cloud import GCSPath
 
+from .geoparquet import BoundingBox
+from .geoparquet import GeoParquetDataset
+from .geoparquet import _GeoParquetColumnMetadata
+from .geoparquet import _GeoParquetMetadata
+
 if sys.version_info >= (3, 11):
     from enum import StrEnum
-    from typing import Required
-    from typing import Self
-    from typing import TypedDict
 else:
     from strenum import StrEnum
-    from typing_extensions import Required
-    from typing_extensions import Self
-    from typing_extensions import TypedDict
 
 if TYPE_CHECKING:
     from pyarrow._stubs_typing import FilterTuple
-
-
-class _GeoParquetColumnMetadata(TypedDict, total=False):
-    encoding: Required[str]
-    geometry_types: Required[list[str]]
-    crs: str | dict[str, Any] | None
-    orientation: Literal["counterclockwise"]
-    edges: Literal["planar", "spherical"]
-    bbox: list[float]
-    epoch: float
-    covering: dict[str, Any]
-
-
-class _GeoParquetMetadata(TypedDict):
-    version: str
-    primary_column: str
-    columns: dict[str, _GeoParquetColumnMetadata]
-
-
-class BoundingBox(NamedTuple):
-    """Avgrensningsboks etter Geojson rekkefølge."""
-
-    xmin: float
-    ymin: float
-    xmax: float
-    ymax: float
-
-    def get_parquet_bbox_filter(
-        self: Self, geo_metadata: _GeoParquetMetadata, geometry_column: str
-    ) -> pc.Expression:
-        """Lager Pyarrow filter for avgrensningsboks."""
-        column_meta = geo_metadata["columns"][geometry_column]
-
-        covering = column_meta.get("covering")
-        if covering:
-            bbox_column_name = covering["bbox"]["xmin"][0]
-            return ~(
-                (pc.field((bbox_column_name, "xmin")) > self.xmax)
-                | (pc.field((bbox_column_name, "ymin")) > self.ymax)
-                | (pc.field((bbox_column_name, "xmax")) < self.xmin)
-                | (pc.field((bbox_column_name, "ymax")) < self.ymin)
-            )
-
-        elif column_meta["encoding"] == "point":
-            return (
-                (pc.field((geometry_column, "x")) >= self.xmin)
-                & (pc.field((geometry_column, "x")) <= self.xmax)
-                & (pc.field((geometry_column, "y")) >= self.ymin)
-                & (pc.field((geometry_column, "y")) <= self.ymax)
-            )
-
-        else:
-            raise ValueError(
-                "Specifying 'bbox' not supported for this Parquet file (it should either "
-                "have a bbox covering column or use 'point' encoding)."
-            )
-
-    def intersects(self: Self, other: Self) -> bool:
-        """Returner sann hvis annen avgrensningsboks overlapper denne."""
-        return not (
-            (other.xmin > self.xmax)
-            or (other.ymin > self.ymax)
-            or (other.xmax < self.xmin)
-            or (other.ymax < self.ymin)
-        )
-
-    def intersects_fragment(
-        self: Self, fragment: ds.ParquetFileFragment, geometry_column: str
-    ) -> bool:
-        """Sjekker om et parquet-filfragment overlapper den gitte avgrensningsboksen."""
-        fragment.ensure_complete_metadata()
-        schema = fragment.physical_schema
-        metadata = schema.metadata if schema.metadata else {}
-        geo_metadata = _get_geometry_metadata(metadata)
-        column_meta = geo_metadata["columns"][geometry_column]
-        bbox = self.from_geo_metadata(column_meta)
-        return self.intersects(bbox)
-
-    @classmethod
-    def from_geo_metadata(
-        cls: type[Self], column_meta: _GeoParquetColumnMetadata
-    ) -> Self:
-        """Lager avgrensningsboks for angitte metadata."""
-        try:
-            bbox = column_meta["bbox"]
-        except KeyError as err:
-            raise ValueError("No bbox given in that dataset") from err
-
-        return cls(*bbox)
 
 
 _GEOMETRY_TYPE_NAMES = [
@@ -198,30 +102,14 @@ def set_gdal_auth() -> None:
     pyogrio.set_gdal_config_options(options)
 
 
-@overload
-def _ensure_gs_path(path_or_paths: str) -> GCSPath: ...
-
-
-@overload
-def _ensure_gs_path(path_or_paths: GCSPath) -> GCSPath: ...
-
-
-@overload
-def _ensure_gs_path(path_or_paths: Iterable[str]) -> list[GCSPath]: ...
-
-
-@overload
-def _ensure_gs_path(path_or_paths: Iterable[GCSPath]) -> list[GCSPath]: ...
-
-
 def _ensure_gs_path(
     path_or_paths: str | GCSPath | Iterable[str] | Iterable[GCSPath],
-) -> GCSPath | list[GCSPath]:
+) -> list[GCSPath]:
     if isinstance(path_or_paths, GCSPath):
-        return path_or_paths
+        return [path_or_paths]
 
     elif isinstance(path_or_paths, str):
-        return cast(GCSPath, GCSPath(path_or_paths, protocol="gs"))  # type: ignore [redundant-cast]
+        return [cast(GCSPath, GCSPath(path_or_paths, protocol="gs"))]  # type: ignore [redundant-cast]
 
     elif any(isinstance(path, GCSPath) for path in path_or_paths):
         return cast(list[GCSPath], list(path_or_paths))
@@ -268,32 +156,39 @@ def read_dataframe(
     Støtter geoparquetfiler med WKB kodet geometri og partisjonerte geoparquetfiler.
     Bruker pyogrio til å lese andre filformater.
     """
-    gcs_path_or_paths = _ensure_gs_path(path_or_paths)
+    gcs_paths = _ensure_gs_path(path_or_paths)
 
     if file_format is None:
-        if isinstance(gcs_path_or_paths, GCSPath):
-            extension = gcs_path_or_paths.suffix
-            file_format = _FILE_EXTENSTION2FORMAT.get(extension)
-
-        elif all(path.suffix == "parquet" for path in gcs_path_or_paths):
+        if all(path.suffix == "parquet" for path in gcs_paths):
             file_format = FileFormat.PARQUET
 
+        else:
+            extension = gcs_paths[0].suffix
+            file_format = _FILE_EXTENSTION2FORMAT.get(extension)
+
+
     if file_format == FileFormat.PARQUET:
-        return _read_parquet(
-            gcs_path_or_paths,
-            columns=columns,
-            bbox=bbox,
-            filters=filters,
+        dataset = GeoParquetDataset(
+            gcs_paths,
             geometry_column=geometry_column,
+            filters=filters,
+            bbox=bbox,
             **kwargs,
         )
 
+        arrow_table = dataset.read()
+
+        return _arrow_til_geopandas(
+            arrow_table, dataset.geometry_metadata, geometry_column
+        )
+
     else:
-        if not isinstance(gcs_path_or_paths, GCSPath):
+        if len(gcs_paths) > 1:
             raise ValueError("Multiple paths are only supported for parquet format")
 
         set_gdal_auth()
-        vsi_path = _ensure_gs_vsi_prefix(gcs_path_or_paths)
+        gcs_path = gcs_paths[0]
+        vsi_path = _ensure_gs_vsi_prefix(gcs_path)
 
         try:
             return pyogrio.read_dataframe(
@@ -314,7 +209,7 @@ def read_dataframe(
             if file_format in {FileFormat.SHAPEFILE, FileFormat.FILEGDB}:
                 raise e
 
-            with gcs_path_or_paths.open("rb") as buffer:
+            with gcs_path.open("rb") as buffer:
                 return pyogrio.read_dataframe(
                     buffer,
                     bbox=bbox,
@@ -336,7 +231,7 @@ def write_dataframe(
     Støtter  å skrive til geoparquetfiler med WKB kodet geometri, og
     bruker pyogrio til å lese andre filformater.
     """
-    gsc_path = _ensure_gs_path(path)
+    gsc_path = _ensure_gs_path(path)[0]
 
     if file_format is None:
         extension = gsc_path.suffix
@@ -458,147 +353,6 @@ def _geopandas_to_arrow(gdf: gpd.GeoDataFrame) -> pyarrow.Table:
     return table.replace_schema_metadata(metadata)
 
 
-def _filter_fragments_with_bbox(
-    fragments: Iterable[ds.ParquetFileFragment],
-    bbox: BoundingBox,
-    geometry_colum: str,
-) -> list[ds.ParquetFileFragment]:
-    return [
-        fragment
-        for fragment in fragments
-        if bbox.intersects_fragment(fragment, geometry_colum)
-    ]
-
-
-def _read_parquet(
-    path_or_paths: GCSPath | Iterable[GCSPath],
-    *,
-    columns: list[str] | None = None,
-    bbox: BoundingBox | Iterable[float] | None = None,
-    filters: list[FilterTuple] | list[list[FilterTuple]] | pc.Expression | None = None,
-    geometry_column: str | None = None,
-    schema: pyarrow.Schema | None = None,
-) -> gpd.GeoDataFrame:
-    fileformat = ds.ParquetFileFormat()  # type: ignore  [call-arg]
-    filesystem = pyarrow.fs.GcsFileSystem()
-    partitioning = ds.HivePartitioning.discover(infer_dictionary=True)
-
-    str_path_or_paths: str | list[str]
-
-    if isinstance(path_or_paths, GCSPath):
-        str_path_or_paths = path_or_paths.path
-    else:
-        str_path_or_paths = [path.path for path in path_or_paths]
-
-    try:
-        dataset: ds.FileSystemDataset = ds.dataset(
-            str_path_or_paths,
-            schema=schema,
-            format=fileformat,
-            filesystem=filesystem,
-            partitioning=partitioning,
-        )
-
-    except pyarrow.ArrowTypeError as e:
-        # Pyarrow er streng på at skjemaet i et partisjonert datasett skal være likt for alle filer,
-        # når man ikke spesifiserer et.
-        # I enkle tilfeller forsøker vi hente skjema fra den første filen vi finner, og bruker det.
-        if schema is not None or not isinstance(path_or_paths, GCSPath):
-            raise e
-
-        fragment_paths = list(path_or_paths.glob("**/*.parquet"))
-
-        if len(fragment_paths) < 2:
-            raise e
-
-        parquet_file = fileformat.make_fragment(
-            fragment_paths[0].path, filesystem=filesystem
-        )
-        schema = parquet_file.physical_schema
-        partitioning = ds.HivePartitioning.discover(
-            infer_dictionary=True, schema=schema
-        )
-
-        warnings.warn(
-            "Pyarrow was unable to merge schema for partioned dataset,\n"
-            "forced schema to be like first fragment found. "
-            "Original error:\n"
-            f"{e}",
-            stacklevel=4,
-        )
-
-        dataset = ds.dataset(
-            str_path_or_paths,
-            filesystem=filesystem,
-            format=fileformat,
-            schema=schema,
-            partitioning=partitioning,
-        )
-
-    schema = dataset.schema
-    metadata = schema.metadata if schema.metadata else {}
-
-    if columns and b"pandas" in metadata:
-        # RangeIndex can be represented as dict instead of column name
-        index_columns = [
-            col
-            for col in _get_pandas_index_columns(metadata)
-            if not isinstance(col, dict)
-        ]
-        columns = list(columns) + list(set(index_columns) - set(columns))
-
-    geometry_metadata = _get_geometry_metadata(metadata)
-    _validate_geometry_metadata(geometry_metadata, schema)
-
-    primary_column = (
-        geometry_metadata["primary_column"] if not geometry_column else geometry_column
-    )
-
-    if (
-        columns and primary_column not in columns
-    ) or primary_column not in geometry_metadata["columns"].keys():
-        raise ValueError("Geometry column not in columns read from the Parquet file.")
-
-    filters_expression = (
-        parquet.filters_to_expression(filters) if filters is not None else None  # type: ignore[arg-type]
-    )
-
-    if bbox is not None:
-        if not isinstance(bbox, BoundingBox):
-            bbox = BoundingBox(*bbox)
-
-        bbox_filter = bbox.get_parquet_bbox_filter(geometry_metadata, primary_column)
-
-        filters_expression = (
-            filters_expression & bbox_filter
-            if filters_expression is not None
-            else bbox_filter
-        )
-
-        fragments = _filter_fragments_with_bbox(
-            dataset.get_fragments(), bbox=bbox, geometry_colum=primary_column
-        )
-
-        if not fragments:
-            raise ValueError("No parts of the dataset overlaps the given bounding box")
-
-        dataset = ds.FileSystemDataset(
-            fragments,  # type: ignore[arg-type]
-            schema=dataset.schema,
-            format=dataset.format,
-            filesystem=dataset.filesystem,
-        )
-
-    arrow_table = dataset.to_table(columns=columns, filter=filters_expression)
-
-    if b"pandas" in metadata:
-        new_metadata = arrow_table.schema.metadata or {}
-        new_metadata.update({b"pandas": metadata[b"pandas"]})
-        arrow_table = arrow_table.replace_schema_metadata(new_metadata)
-
-    return _arrow_til_geopandas(arrow_table, geometry_metadata, geometry_column)
-
-
 def _arrow_til_geopandas(
     arrow_table: pyarrow.Table,
     geometry_metadata: _GeoParquetMetadata,
@@ -653,63 +407,6 @@ def _arrow_til_geopandas(
         df.insert(result_column_names.index(column), column, geom_arr)
 
     return gpd.GeoDataFrame(df, geometry=geometry_column)
-
-
-def _get_geometry_metadata(metadata: dict[bytes, bytes]) -> _GeoParquetMetadata:
-    try:
-        geo_metadata_bytes = metadata[b"geo"]
-
-    except KeyError:
-        raise ValueError(
-            """No geometry metadata is present.
-            To read a table without geometry, use dapla.read_pandas() instead"""
-        ) from None
-
-    return json.loads(geo_metadata_bytes.decode("utf-8"))  # type: ignore[no-any-return]
-
-
-def _validate_geometry_metadata(
-    geometadata: _GeoParquetMetadata, schema: pyarrow.Schema
-) -> None:
-    for col, column_metadata in geometadata["columns"].items():
-        if col not in schema.names:
-            raise ValueError("Geometry column in metadata don't exist in dataset")
-
-        column_field = schema.field(col)
-        nested_type = column_field.type
-        while pyarrow.types.is_list(nested_type):
-            nested_type = nested_type.value_type
-
-        if (
-            column_metadata["encoding"] in GEOARROW_ENCODINGS
-        ) and not pyarrow.types.is_struct(nested_type):
-            warnings.warn(
-                (
-                    "Geoparquet files should not use the Geoarrow interleaved encoding.\n"
-                    "A earlier version of this library used the wrong encoding.\n"
-                    "The file will read, but you may be unable to filter the dataset."
-                ),
-                stacklevel=4,
-            )
-
-        if "covering" in column_metadata:
-            covering = column_metadata["covering"]
-            bbox = covering["bbox"]
-            bbox_column_name = bbox["xmin"][0]
-            if bbox_column_name not in schema.names:
-                warnings.warn(
-                    f"The geo metadata indicate that column '{col}' has a bounding box column named '{bbox_column_name}',"
-                    "but this was not found in the dataset",
-                    stacklevel=4,
-                )
-                del column_metadata["covering"]
-
-
-def _get_pandas_index_columns(metadata: dict[bytes, bytes]) -> list[str | dict]:  # type: ignore[type-arg]
-    return cast(
-        list[str | dict],  # type: ignore[type-arg]
-        json.loads(s=metadata[b"pandas"].decode("utf8"))["index_columns"],
-    )
 
 
 def _create_metadata(
