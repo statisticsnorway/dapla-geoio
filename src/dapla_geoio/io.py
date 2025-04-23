@@ -14,7 +14,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pyarrow
-import pyarrow.compute as pc
+import pyarrow.dataset as ds
 import pyarrow.fs
 import pyogrio
 import pyogrio._err
@@ -147,7 +147,7 @@ def read_dataframe(
     file_format: FileFormat | None = None,
     columns: list[str] | None = None,
     bbox: Iterable[float] | BoundingBox | None = None,
-    filters: list[FilterTuple] | list[list[FilterTuple]] | pc.Expression | None = None,
+    filters: list[FilterTuple | list[FilterTuple]] | ds.Expression | None = None,
     geometry_column: str | None = None,
     **kwargs: Any,
 ) -> gpd.GeoDataFrame | pd.DataFrame:
@@ -165,7 +165,6 @@ def read_dataframe(
         else:
             extension = gcs_paths[0].suffix
             file_format = _FILE_EXTENSTION2FORMAT.get(extension)
-
 
     if file_format == FileFormat.PARQUET:
         dataset = GeoParquetDataset(

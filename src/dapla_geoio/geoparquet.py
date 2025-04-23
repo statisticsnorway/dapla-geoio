@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import json
 import sys
 import warnings
 from collections.abc import Iterable
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Literal
 from typing import NamedTuple
@@ -22,6 +25,9 @@ else:
     from typing_extensions import Required
     from typing_extensions import Self
     from typing_extensions import TypedDict
+
+if TYPE_CHECKING:
+    from pyarrow._stubs_typing import FilterTuple
 
 
 class _GeoParquetColumnMetadata(TypedDict, total=False):
@@ -114,9 +120,15 @@ class BoundingBox(NamedTuple):
 
 
 class GeoParquetDataset(parquet.ParquetDataset):
-
-    def __init__(self, paths: Sequence[GCSPath], schema=None, geometry_column=None, filters=None, bbox=None):
-
+    """ """
+    def __init__(
+        self: Self,
+        paths: Sequence[GCSPath],
+        schema: pyarrow.Schema | None = None,
+        geometry_column: str | None = None,
+        filters: list[FilterTuple | list[FilterTuple]] | ds.Expression | None = None,
+        bbox: Iterable[float] | BoundingBox | None = None,
+    ) -> None:
         fileformat = ds.ParquetFileFormat()  # type: ignore  [call-arg]
         filesystem = pyarrow.fs.GcsFileSystem()
 
@@ -125,17 +137,20 @@ class GeoParquetDataset(parquet.ParquetDataset):
             single_file = paths[0].path
             fragment = fileformat.make_fragment(single_file, filesystem)
             self._dataset = ds.FileSystemDataset(
-                [fragment], schema=schema or fragment.physical_schema,
+                [fragment],
+                schema=schema or fragment.physical_schema,
                 format=fileformat,
-                filesystem=filesystem
+                filesystem=filesystem,
             )
-        
+
         else:
-            partitioning = ds.HivePartitioning.discover(infer_dictionary=True, schema=schema)
-            str_paths: list[str] =  [path.path for path in paths]
+            partitioning = ds.HivePartitioning.discover(
+                infer_dictionary=True, schema=schema
+            )
+            str_paths: list[str] = [path.path for path in paths]
 
             try:
-                self._dataset: ds.FileSystemDataset = ds.dataset(
+                self._dataset = ds.dataset(
                     str_paths,
                     schema=schema,
                     format=fileformat,
@@ -185,14 +200,16 @@ class GeoParquetDataset(parquet.ParquetDataset):
         self._validate_geometry_metadata()
 
         self.primary_geometry_column = (
-            self.geometry_metadata["primary_column"] if not geometry_column else geometry_column
+            self.geometry_metadata["primary_column"]
+            if not geometry_column
+            else geometry_column
         )
 
         self._base_dir = None
-        self._filter_expression = (
-            parquet.filters_to_expression(filters) if filters is not None else None  # type: ignore[arg-type]
-        )
-
+        if filters is None or isinstance(filters, ds.Expression):
+            self._filter_expression = filters
+        else:
+            self._filter_expression = parquet.filters_to_expression(filters)
 
         if bbox is not None:
             bbox = BoundingBox(*bbox)
@@ -208,11 +225,15 @@ class GeoParquetDataset(parquet.ParquetDataset):
             )
 
             fragments = self._filter_fragments_with_bbox(
-                self._dataset.get_fragments(), bbox=bbox, geometry_colum=self.primary_geometry_column
+                self._dataset.get_fragments(),
+                bbox=bbox,
+                geometry_colum=self.primary_geometry_column,
             )
 
             if not fragments:
-                raise ValueError("No parts of the dataset overlaps the given bounding box")
+                raise ValueError(
+                    "No parts of the dataset overlaps the given bounding box"
+                )
 
             self._dataset = ds.FileSystemDataset(
                 fragments,  # type: ignore[arg-type]
@@ -221,10 +242,17 @@ class GeoParquetDataset(parquet.ParquetDataset):
                 filesystem=self._dataset.filesystem,
             )
 
-    def read(self, columns=None, use_pandas_metadata=True):
-        table = super().read( columns, use_pandas_metadata)
+    def read(
+        self: Self,
+        columns: list[str] | None = None,
+        use_threads: bool = True,
+        use_pandas_metadata: bool = True,
+    ) -> pyarrow.Table:
+        table = super().read(
+            columns, use_threads=use_threads, use_pandas_metadata=use_pandas_metadata
+        )
 
-        # Gjenoppretter geo metadata 
+        # Gjenoppretter geo metadata
         new_metadata = table.schema.metadata or {}
         new_metadata[b"geo"] = json.dumps(
             self.geometry_metadata, ensure_ascii=False
@@ -232,11 +260,8 @@ class GeoParquetDataset(parquet.ParquetDataset):
         table = table.replace_schema_metadata(new_metadata)
 
         return table
-    
 
-    def _validate_geometry_metadata(
-            self
-    ) -> None:
+    def _validate_geometry_metadata(self: Self) -> None:
         schema = self.schema
         for col, column_metadata in self.geometry_metadata["columns"].items():
             if col not in schema.names:
@@ -271,7 +296,6 @@ class GeoParquetDataset(parquet.ParquetDataset):
                     )
                     del column_metadata["covering"]
 
-    
     @staticmethod
     def _filter_fragments_with_bbox(
         fragments: Iterable[ds.ParquetFileFragment],
@@ -283,7 +307,7 @@ class GeoParquetDataset(parquet.ParquetDataset):
             for fragment in fragments
             if bbox.intersects_fragment(fragment, geometry_colum)
         ]
-    
+
 
 def _get_geometry_metadata(metadata: dict[bytes, bytes]) -> _GeoParquetMetadata:
     try:
