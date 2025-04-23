@@ -120,7 +120,8 @@ class BoundingBox(NamedTuple):
 
 
 class GeoParquetDataset(parquet.ParquetDataset):
-    """ """
+    """Tilpasset versjon av ParquetDataset, som kan ta en avgrensningsboks, i tillegg til filter."""
+
     def __init__(
         self: Self,
         paths: Sequence[GCSPath],
@@ -129,6 +130,12 @@ class GeoParquetDataset(parquet.ParquetDataset):
         filters: list[FilterTuple | list[FilterTuple]] | ds.Expression | None = None,
         bbox: Iterable[float] | BoundingBox | None = None,
     ) -> None:
+        """Enklere versjon som kan ta en avgrensningsboks, i tillegg til filter.
+
+        Hvis vi kommer over et partisjonert datasett som innholder et inkonsistent skjema,
+        forsøker vi å tvinge skjemaet til den første fila vi finner over på de andre.
+        Kan foreløpig kun lese filer på GCS.
+        """
         fileformat = ds.ParquetFileFormat()  # type: ignore  [call-arg]
         filesystem = pyarrow.fs.GcsFileSystem()
 
@@ -248,6 +255,10 @@ class GeoParquetDataset(parquet.ParquetDataset):
         use_threads: bool = True,
         use_pandas_metadata: bool = True,
     ) -> pyarrow.Table:
+        """Leser datasett over til payarrow.Table.
+
+        Sørger for å kopiere over geometadata.
+        """
         table = super().read(
             columns, use_threads=use_threads, use_pandas_metadata=use_pandas_metadata
         )
