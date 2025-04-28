@@ -141,7 +141,6 @@ class GeoParquetDataset(parquet.ParquetDataset):
 
         # (path / "/") er en workaround til https://github.com/fsspec/gcsfs/pull/676 er løst.
         if len(paths) == 1 and (paths[0] / "/").is_file():
-
             single_file = paths[0].path
             fragment = fileformat.make_fragment(single_file, filesystem)
             self._dataset = ds.FileSystemDataset(
@@ -152,10 +151,17 @@ class GeoParquetDataset(parquet.ParquetDataset):
             )
 
         else:
-            partitioning = ds.HivePartitioning.discover(
-                infer_dictionary=True, schema=schema
-            )
-            str_paths: list[str] = [path.path for path in paths]
+            partitioning = ds.HivePartitioning.discover(infer_dictionary=True)
+
+            if len(paths) == 1 and (paths[0] / "/").is_dir():
+                str_paths: list[str] = [
+                    path.path for path in paths[0].glob("**/*.parquet")
+                ]
+                base_dir: str | None = paths[0].path
+
+            else:
+                str_paths = [path.path for path in paths]
+                base_dir = None
 
             try:
                 self._dataset = ds.dataset(
@@ -164,6 +170,7 @@ class GeoParquetDataset(parquet.ParquetDataset):
                     format=fileformat,
                     filesystem=filesystem,
                     partitioning=partitioning,
+                    partition_base_dir=base_dir,
                 )
 
             except pyarrow.ArrowTypeError as e:
@@ -182,9 +189,6 @@ class GeoParquetDataset(parquet.ParquetDataset):
                     fragment_paths[0].path, filesystem=filesystem
                 )
                 schema = parquet_file.physical_schema
-                partitioning = ds.HivePartitioning.discover(
-                    infer_dictionary=True, schema=schema
-                )
 
                 warnings.warn(
                     "Pyarrow was unable to merge schema for partioned dataset,\n"
