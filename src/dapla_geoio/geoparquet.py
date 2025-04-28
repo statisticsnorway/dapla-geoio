@@ -139,7 +139,8 @@ class GeoParquetDataset(parquet.ParquetDataset):
         fileformat = ds.ParquetFileFormat()  # type: ignore  [call-arg]
         filesystem = pyarrow.fs.GcsFileSystem()
 
-        if len(paths) == 1 and paths[0].is_file():
+        # (path / "/") er en workaround til https://github.com/fsspec/gcsfs/pull/676 er løst.
+        if len(paths) == 1 and (paths[0] / "/").is_file():
 
             single_file = paths[0].path
             fragment = fileformat.make_fragment(single_file, filesystem)
