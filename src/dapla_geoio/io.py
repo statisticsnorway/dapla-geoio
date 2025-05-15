@@ -175,7 +175,7 @@ def read_dataframe(
             **kwargs,
         )
 
-        arrow_table = dataset.read()
+        arrow_table = dataset.read(columns=columns)
 
         return _arrow_til_geopandas(
             arrow_table, dataset.geometry_metadata, geometry_column
