@@ -1,6 +1,6 @@
 [project]
 name = "ssb-dapla-geoio"
-version = "0.1.1"
+version = "0.2.0"
 description = "Dapla GeoIO"
 authors = [{name = "Bjørn Lie Rapp", email = "bjorn.rapp@ssb.no"}]
 license = "MIT"
