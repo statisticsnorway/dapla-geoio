@@ -8,11 +8,11 @@ readme = "README.md"
 requires-python = ">=3.10,<4.0"
 classifiers = ["Development Status :: 2 - Pre-Alpha"]
 dependencies = [
-    "geopandas (>=1.0.1,<2.0.0)", 
-    "pyogrio (>=0.10.0,<0.11.0)", 
-    "dapla-toolbelt (>=3.2.2,<4.0.0)", 
-    "strenum (>=0.4.15,<0.5.0)", 
-    "universal-pathlib (>=0.2.6)", 
+    "geopandas (>=1.0.1,<2.0.0)",
+    "pyogrio (>=0.10.0,<0.11.0)",
+    "dapla-toolbelt (>=3.2.2,<4.0.0)",
+    "strenum (>=0.4.15,<0.5.0)",
+    "universal-pathlib (>=0.2.6)",
     "gcsfs (>=2025.5.1)",
     ]
 
