@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sys
 import warnings
 from collections.abc import Iterable
 from collections.abc import Sequence
@@ -9,6 +8,9 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Literal
 from typing import NamedTuple
+from typing import Required
+from typing import Self
+from typing import TypedDict
 
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
@@ -16,15 +18,6 @@ import pyarrow.fs
 from geopandas.io._geoarrow import GEOARROW_ENCODINGS
 from pyarrow import parquet
 from upath.implementations.cloud import GCSPath
-
-if sys.version_info >= (3, 11):
-    from typing import Required
-    from typing import Self
-    from typing import TypedDict
-else:
-    from typing_extensions import Required
-    from typing_extensions import Self
-    from typing_extensions import TypedDict
 
 if TYPE_CHECKING:
     from pyarrow._stubs_typing import FilterTuple

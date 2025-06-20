@@ -3,9 +3,9 @@ from __future__ import annotations
 import io
 import json
 import shutil
-import sys
 from collections.abc import Iterable
 from collections.abc import Iterator
+from enum import StrEnum
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import cast
@@ -32,11 +32,6 @@ from .geoparquet import BoundingBox
 from .geoparquet import GeoParquetDataset
 from .geoparquet import _GeoParquetColumnMetadata
 from .geoparquet import _GeoParquetMetadata
-
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from strenum import StrEnum
 
 if TYPE_CHECKING:
     from pyarrow._stubs_typing import FilterTuple
