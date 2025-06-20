@@ -139,8 +139,7 @@ class GeoParquetDataset(parquet.ParquetDataset):
         fileformat = ds.ParquetFileFormat()  # type: ignore  [call-arg]
         filesystem = pyarrow.fs.GcsFileSystem()
 
-        # (path / "/") er en workaround til https://github.com/fsspec/gcsfs/pull/676 er løst.
-        if len(paths) == 1 and (paths[0] / "/").is_file():
+        if len(paths) == 1 and paths[0].is_file():
             single_file = paths[0].path
             fragment = fileformat.make_fragment(single_file, filesystem)
             self._dataset = ds.FileSystemDataset(
@@ -153,7 +152,7 @@ class GeoParquetDataset(parquet.ParquetDataset):
         else:
             partitioning = ds.HivePartitioning.discover(infer_dictionary=True)
 
-            if len(paths) == 1 and (paths[0] / "/").is_dir():
+            if len(paths) == 1 and paths[0].is_dir():
                 str_paths: list[str] = [
                     path.path for path in paths[0].glob("**/*.parquet")
                 ]
