@@ -18,7 +18,6 @@
 [pypi status]: https://pypi.org/project/ssb-dapla-geoio/
 [documentation]: https://statisticsnorway.github.io/dapla-geoio
 [tests]: https://github.com/statisticsnorway/dapla-geoio/actions?workflow=Tests
-
 [sonarcov]: https://sonarcloud.io/summary/overall?id=statisticsnorway_dapla-geoio
 [sonarquality]: https://sonarcloud.io/summary/overall?id=statisticsnorway_dapla-geoio
 [pre-commit]: https://github.com/pre-commit/pre-commit

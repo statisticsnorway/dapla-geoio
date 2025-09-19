@@ -36,6 +36,7 @@ pre-commit-hooks = ">=4.1.0"
 ruff = ">=0.0.284"
 typeguard = ">=2.13.3"
 xdoctest = { extras = ["colors"], version = ">=0.15.10" }
+deptry = "^0.23.1"
 
 [tool.poetry.group.test.dependencies]
 pytest = ">=6.2.5"
@@ -54,6 +55,9 @@ sphinx-click = ">=3.0.2"
 furo = ">=2021.11.12"
 myst-parser = { version = ">=0.16.1" }
 
+[tool.poetry.requires-plugins]
+poetry-plugin-export = ">=1.9"
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 
@@ -69,6 +73,9 @@ relative_files = true
 [tool.coverage.report]
 show_missing = true
 fail_under = 50
+
+[tool.deptry.per_rule_ignores]
+DEP001 = ["nox", "nox_poetry"]  # packages available by default
 
 [tool.mypy]
 strict = true
@@ -118,6 +125,7 @@ select = [
 ignore = [
     "A005",
     "ANN003", # Supress Missing type annotation for `**kwargs`
+    "ANN202", # Don't require return type annotation for private functions.
     "ANN401", # Allow type annotation with type Any.
     "D100",   # Supress undocumented-public-module. Only doc of public api required.
     "E402",   # Supress module-import-not-at-top-of-file, needed in jupyter notebooks.
