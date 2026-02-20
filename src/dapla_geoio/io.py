@@ -353,7 +353,7 @@ def _arrow_til_geopandas(
     arrow_table: pyarrow.Table,
     geometry_metadata: _GeoParquetMetadata,
     geometry_column: str | None = None,
-    **kwargs
+    **kwargs,
 ) -> gpd.GeoDataFrame:
     """Kopiert og tilpasset privat funksjon fra https://github.com/geopandas/geopandas/blob/9ad28395c0b094dbddd282a5bdf44900fe6650a1/geopandas/io/arrow.py."""
     geometry_columns = [
@@ -363,11 +363,9 @@ def _arrow_til_geopandas(
     geometry_columns.sort(key=result_column_names.index)
 
     if not len(geometry_columns):
-        raise ValueError(
-            """No geometry columns are included in the columns read from
+        raise ValueError("""No geometry columns are included in the columns read from
             the Parquet file.  To read this file without geometry columns,
-            use dapla.read_pandas() instead."""
-        )
+            use dapla.read_pandas() instead.""")
 
     geometry_column = (
         geometry_metadata["primary_column"] if not geometry_column else geometry_column
