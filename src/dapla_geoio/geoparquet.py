@@ -129,7 +129,7 @@ class GeoParquetDataset(parquet.ParquetDataset):
         forsøker vi å tvinge skjemaet til den første fila vi finner over på de andre.
         Kan foreløpig kun lese filer på GCS.
         """
-        fileformat = ds.ParquetFileFormat()  # type: ignore  [call-arg]
+        fileformat = ds.ParquetFileFormat()
         filesystem = pyarrow.fs.GcsFileSystem()
 
         if len(paths) == 1 and paths[0].is_file():

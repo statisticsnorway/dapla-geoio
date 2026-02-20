@@ -117,7 +117,7 @@ def gcs_fixture(docker_gcs: str, local_testdir: Path) -> Iterator[GCSPath]:
     fs = bucket_path.fs
 
     if bucket_path.exists():
-        for key in bucket_path.iterdir():  # type: ignore [no-untyped-call]
+        for key in bucket_path.iterdir():
             if key.is_file():
                 key.unlink()
     else:

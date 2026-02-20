@@ -295,7 +295,7 @@ def get_parquet_files_in_folder(folder: str | GCSPath) -> list[GCSPath]:
 
     Nyttig hvis man har flere geoparquet filer, men som ikke har «hive» partisjonering.
     """
-    file_paths = cast(Iterator[GCSPath], GCSPath(folder, protocol="gs").glob("**/*"))
+    file_paths = cast(Iterator[GCSPath], GCSPath(folder, protocol="gs").glob("**/*"))  # type: ignore [redundant-cast]
     return list(filter(lambda p: p.suffix == ".parquet", file_paths))
 
 
@@ -353,7 +353,7 @@ def _arrow_til_geopandas(
     arrow_table: pyarrow.Table,
     geometry_metadata: _GeoParquetMetadata,
     geometry_column: str | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> gpd.GeoDataFrame:
     """Kopiert og tilpasset privat funksjon fra https://github.com/geopandas/geopandas/blob/9ad28395c0b094dbddd282a5bdf44900fe6650a1/geopandas/io/arrow.py."""
     geometry_columns = [
