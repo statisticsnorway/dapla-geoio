@@ -121,13 +121,13 @@ def gcs_fixture(docker_gcs: str, local_testdir: Path) -> Iterator[GCSPath]:
             if key.is_file():
                 key.unlink()
     else:
-        fs.mkdir(str(bucket_path))
+        fs.mkdir(bucket_path.path, create_parents=True)
 
     for source_path in local_testdir.iterdir():
         target_path = bucket_path / source_path.relative_to(local_testdir)
 
         if source_path.is_file():
-            fs.upload(str(source_path), str(target_path))
+            fs.upload(source_path, target_path.path)
 
     fs.invalidate_cache()
 
@@ -199,13 +199,15 @@ def shpfile_path(gcs_fixture: GCSPath, gdal_patch: None) -> Iterator[GCSPath]:
         (gcs_fixture / "temp" / sidecar).unlink()
 
 
-def test_read_parquet(gcs_fixture: GCSPath, pyarrrow_patch: None) -> None:
+@pytest.mark.usefixtures("pyarrrow_patch")
+def test_read_parquet(gcs_fixture: GCSPath) -> None:
     parquetfile_path = gcs_fixture / "points.parquet"
     lestdataframe = read_dataframe(parquetfile_path)
     assert_frame_equal(punkdataframe, lestdataframe)
 
 
-def test_read_parquet_bbox(gcs_fixture: GCSPath, pyarrrow_patch: None) -> None:
+@pytest.mark.usefixtures("pyarrrow_patch")
+def test_read_parquet_bbox(gcs_fixture: GCSPath) -> None:
     parquetfile_path = gcs_fixture / "points.parquet"
     lestdataframe = read_dataframe(parquetfile_path, bbox=[0.5, 1.5, 2.5, 3.5])
     assert_frame_equal(punkdataframe.iloc[:2], lestdataframe)
