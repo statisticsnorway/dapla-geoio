@@ -5,7 +5,7 @@ description = "Dapla GeoIO"
 authors = [{name = "Bjørn Lie Rapp", email = "bjorn.rapp@ssb.no"}]
 license = "MIT"
 readme = "README.md"
-requires-python = ">=3.10,<4.0"
+requires-python = ">=3.11"
 classifiers = ["Development Status :: 2 - Pre-Alpha"]
 dependencies = [
     "geopandas (>=1.0.1,<2.0.0)",
@@ -32,14 +32,14 @@ requires-poetry = ">=2.0.0"
 pygments = ">=2.10.0"
 black = { extras = ["jupyter"], version = ">=23.1.0" }
 coverage = { extras = ["toml"], version = ">=6.2" }
-darglint = ">=1.8.1"
+darglint = { version = ">=1.8.1", python = "<4" }
 mypy = ">=0.930"
 pre-commit = ">=2.16.0"
 pre-commit-hooks = ">=4.1.0"
 ruff = ">=0.0.284"
 typeguard = ">=2.13.3"
 xdoctest = { extras = ["colors"], version = ">=0.15.10" }
-deptry = "^0.23.1"
+deptry = {version = "^0.23.1", python = "<4"}
 
 [tool.poetry.group.test.dependencies]
 pytest = ">=6.2.5"
@@ -48,8 +48,8 @@ requests = "^2.32.5"
 
 [tool.poetry.group.type-stubs.dependencies]
 types-shapely = "^2.1.0.20250917"
-pandas-stubs = {version = "^3.0.0.260204", python = ">=3.11"}
-pyarrow-stubs = "^20.0.0.20251215"
+pandas-stubs = {version = "^3.0.0.260204"}
+pyarrow-stubs = {version = "^20.0.0.20251215", python = "<4"}
 
 [tool.poetry.group.docs.dependencies]
 sphinx = ">=6.2.1"
