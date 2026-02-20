@@ -10,7 +10,6 @@ from textwrap import dedent
 
 import nox
 
-
 try:
     from nox_poetry import Session
     from nox_poetry import session
@@ -25,7 +24,6 @@ except ImportError:
 
 package = "dapla_geoio"
 python_versions = ["3.11", "3.12", "3.13"]
-python_versions_for_test = python_versions + ["3.10"]
 nox.needs_version = ">= 2021.6.6"
 nox.options.sessions = (
     "pre-commit",
@@ -169,7 +167,7 @@ def mypy(session: Session) -> None:
         session.run("mypy", f"--python-executable={sys.executable}", "noxfile.py")
 
 
-@session(python=python_versions_for_test)
+@session(python=python_versions)
 def tests(session: Session) -> None:
     """Run the test suite."""
     session.poetry.installroot()
