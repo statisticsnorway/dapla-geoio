@@ -144,6 +144,8 @@ def read_dataframe(
     bbox: Iterable[float] | BoundingBox | None = None,
     filters: list[FilterTuple | list[FilterTuple]] | ds.Expression | None = None,
     geometry_column: str | None = None,
+    *,
+    schema: pyarrow.Schema | None = None,
     **kwargs: Any,
 ) -> gpd.GeoDataFrame | pd.DataFrame:
     """Leser inn en fil som innholder geometri til en Geopandas geodataframe.
@@ -164,10 +166,10 @@ def read_dataframe(
     if file_format == FileFormat.PARQUET:
         dataset = GeoParquetDataset(
             gcs_paths,
+            schema=schema,
             geometry_column=geometry_column,
             filters=filters,
             bbox=bbox,
-            **kwargs,
         )
 
         arrow_table = dataset.read(columns=columns)
@@ -351,6 +353,7 @@ def _arrow_til_geopandas(
     arrow_table: pyarrow.Table,
     geometry_metadata: _GeoParquetMetadata,
     geometry_column: str | None = None,
+    **kwargs
 ) -> gpd.GeoDataFrame:
     """Kopiert og tilpasset privat funksjon fra https://github.com/geopandas/geopandas/blob/9ad28395c0b094dbddd282a5bdf44900fe6650a1/geopandas/io/arrow.py."""
     geometry_columns = [
@@ -375,7 +378,7 @@ def _arrow_til_geopandas(
         raise ValueError("Geometry column not in columns read from the Parquet file.")
 
     table_attr = arrow_table.drop(geometry_columns)
-    df = table_attr.to_pandas()
+    df = table_attr.to_pandas(**kwargs)
 
     # Convert the WKB columns that are present back to geometry.
     for column in geometry_columns:
